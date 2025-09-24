@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import './styles/global.css'
+import './style.css'
 
 import openAIService from './services/openai'
 import StorageService, { STORAGE_KEYS } from './services/storage'
