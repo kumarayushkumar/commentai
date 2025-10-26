@@ -3,14 +3,14 @@
  * This file contains settings for AI model, LinkedIn DOM selectors, and default prompt.
  */
 
-import type { AISettings, LinkedInSelectors } from "../types";
+import type { AISettings, LinkedInSelectors } from "./types";
 
 /**
  * AI model settings
  * These control the behavior of the OpenAI API requests
  */
 export const AI_SETTINGS: AISettings = {
-  MODEL: "gpt-4o",
+  MODEL: "gemini-2.0-flash",
   TEMPERATURE: 0.4,
   N: 3,
 };

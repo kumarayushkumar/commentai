@@ -4,10 +4,10 @@
  * and integrate with the side panel for AI-generated comments.
  */
 
+import { LINKEDIN_SELECTORS } from "./lib/constants";
+import { createObserver, extractPostText } from "./lib/helpers";
+import { showNotification } from "./lib/notification";
 import StorageService, { STORAGE_KEYS } from "./services/storage";
-import { LINKEDIN_SELECTORS } from "./utils/constants";
-import { createObserver, extractPostText } from "./utils/helpers";
-import { showNotification } from "./utils/notification";
 
 declare global {
   interface Window {
@@ -71,7 +71,7 @@ declare global {
         // Check if extension is active
         let isActive = true;
         try {
-          const result = await StorageService.get(
+          const result = await StorageService.getData(
             STORAGE_KEYS.EXTENSION_ACTIVE
           );
           isActive = result[STORAGE_KEYS.EXTENSION_ACTIVE] !== false;
@@ -110,9 +110,7 @@ declare global {
 
           try {
             const postDataWithTimestamp = `${postText}|||${Date.now()}`;
-            await StorageService.set({
-              [STORAGE_KEYS.LAST_POST_TEXT]: postDataWithTimestamp,
-            });
+        
 
             showNotification("Check side panel for comments", "info");
 

@@ -3,9 +3,9 @@
  * Handles installation, updates, and side panel interactions
  */
 
+import { DEFAULT_PROMPT } from "./lib/constants";
+import { showBackgroundNotification } from "./lib/notification";
 import StorageService, { STORAGE_KEYS } from "./services/storage";
-import { showBackgroundNotification } from "./utils/notification";
-import { DEFAULT_PROMPT } from "./utils/constants";
 
 // Initialize default settings when extension is installed
 chrome.runtime.onInstalled.addListener(async (details) => {
@@ -15,7 +15,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
       await StorageService.set({
         [STORAGE_KEYS.DEFAULT_PROMPT]: DEFAULT_PROMPT,
         [STORAGE_KEYS.EXTENSION_ACTIVE]: true,
-        [STORAGE_KEYS.CUSTOM_PROMPT]: ''
+        [STORAGE_KEYS.CUSTOM_PROMPT]: '',
       });
       showBackgroundNotification('Extension installed and ready to use!', 'success');
     } catch (error) {

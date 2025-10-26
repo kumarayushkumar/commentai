@@ -10,7 +10,10 @@
     "package": "plasmo package"
   },
   "dependencies": {
+    "@google/genai": "^1.27.0",
     "@plasmohq/storage": "^1.15.0",
+    "i": "^0.3.7",
+    "npm": "^11.6.2",
     "plasmo": "0.90.5",
     "react": "18.2.0",
     "react-dom": "18.2.0",

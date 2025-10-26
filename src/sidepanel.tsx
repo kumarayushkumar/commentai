@@ -7,10 +7,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import './style.css'
 
-import openAIService from './services/openai'
+import { DEFAULT_PROMPT } from './lib/constants'
+import { setApiKey, setupLastPostTextWatcher } from './lib/storageEvents'
+import openAIService from './services/gemini'
 import StorageService, { STORAGE_KEYS } from './services/storage'
-import { DEFAULT_PROMPT } from './utils/constants'
-import { setupLastPostTextWatcher } from './utils/storageEvents'
 
 // Custom hook for managing temporary status messages
 const useStatusMessage = () => {
@@ -43,7 +43,9 @@ const StatusDisplay = ({
 )
 
 function IndexSidePanel() {
-  const [activeTab, setActiveTab] = useState<'comment' | 'settings'>('comment')
+  const [activeTab, setActiveTab] = useState<
+    'comment' | 'autoComment' | 'settings'
+  >('comment')
   const [isExtensionActive, setIsExtensionActive] = useState(true)
   const [promptText, setPromptText] = useState('')
   const [comments, setComments] = useState<string[]>([
@@ -52,6 +54,14 @@ function IndexSidePanel() {
     'Loading...'
   ])
   const [fetchingComments, setFetchingComments] = useState(false)
+
+  // Auto comment states
+  const [isAutoCommenting, setIsAutoCommenting] = useState(false)
+  const [autoCommentProgress, setAutoCommentProgress] = useState({
+    current: 0,
+    total: 0
+  })
+  const [autoCommentTarget, setAutoCommentTarget] = useState(30)
 
   // Use custom hook for status messages
   const [statusMessage, showStatusMessage, clearStatusMessage] =
@@ -64,8 +74,9 @@ function IndexSidePanel() {
 
   const promptInputRef = useRef<HTMLTextAreaElement>(null)
   const activeToggleRef = useRef<HTMLInputElement>(null)
+  const autoCommentTargetRef = useRef<HTMLInputElement>(null)
 
-  const handleTabClick = (tab: 'comment' | 'settings') => {
+  const handleTabClick = (tab: 'comment' | 'autoComment' | 'settings') => {
     setActiveTab(tab)
   }
 
@@ -110,10 +121,11 @@ function IndexSidePanel() {
   // Load settings from storage
   const loadSettings = async () => {
     try {
-      const result = await StorageService.get([
+      const result = await StorageService.getData([
         STORAGE_KEYS.CUSTOM_PROMPT,
         STORAGE_KEYS.EXTENSION_ACTIVE,
-        STORAGE_KEYS.DEFAULT_PROMPT
+        STORAGE_KEYS.DEFAULT_PROMPT,
+        STORAGE_KEYS.AUTO_COMMENT_TARGET
       ])
 
       // If user has a custom prompt saved, use that
@@ -126,12 +138,13 @@ function IndexSidePanel() {
         // Fallback to constant default prompt
         setPromptText(DEFAULT_PROMPT)
         // Store default prompt in storage
-        await StorageService.set({
+        await StorageService.setData({
           [STORAGE_KEYS.DEFAULT_PROMPT]: DEFAULT_PROMPT
         })
       }
 
       setIsExtensionActive(result[STORAGE_KEYS.EXTENSION_ACTIVE] !== false)
+      setAutoCommentTarget(result[STORAGE_KEYS.AUTO_COMMENT_TARGET] || 30)
     } catch (error) {
       showStatusMessage('Error loading settings')
     }
@@ -140,16 +153,22 @@ function IndexSidePanel() {
   // Save settings
   const saveSettings = async () => {
     try {
-      await StorageService.set({
+      await StorageService.setData({
         [STORAGE_KEYS.CUSTOM_PROMPT]: promptInputRef.current?.value,
-        [STORAGE_KEYS.EXTENSION_ACTIVE]: activeToggleRef.current?.checked
+        [STORAGE_KEYS.EXTENSION_ACTIVE]: activeToggleRef.current?.checked,
+        [STORAGE_KEYS.AUTO_COMMENT_TARGET]: parseInt(
+          autoCommentTargetRef.current?.value || '30'
+        )
       })
 
       setPromptText(promptInputRef.current?.value || '')
       setIsExtensionActive(activeToggleRef.current?.checked || false)
+      setAutoCommentTarget(
+        parseInt(autoCommentTargetRef.current?.value || '30')
+      )
 
       showStatusMessage('Settings saved!')
-      
+
       // Refresh comments to reflect the new active state
       fetchVariants()
     } catch (error) {
@@ -167,7 +186,7 @@ function IndexSidePanel() {
       setPromptText(defaultPrompt)
 
       // Clear custom prompt from storage
-      await StorageService.set({ [STORAGE_KEYS.CUSTOM_PROMPT]: '' })
+      await StorageService.setData({ [STORAGE_KEYS.CUSTOM_PROMPT]: '' })
 
       showStatusMessage('Prompt reset to default!')
     } catch (error) {
@@ -186,7 +205,7 @@ function IndexSidePanel() {
 
     try {
       // Fetch post and prompt data
-      const dataFromStorage = await StorageService.get([
+      const dataFromStorage = await StorageService.getData([
         STORAGE_KEYS.LAST_POST_TEXT,
         STORAGE_KEYS.CUSTOM_PROMPT,
         STORAGE_KEYS.DEFAULT_PROMPT,
@@ -227,7 +246,7 @@ function IndexSidePanel() {
 
       const content = `This is a linked post,\n${actualPostText}\n\n---\n${promptToUse}`
 
-      const generatedComments = await openAIService.generateComment(content)
+      const generatedComments = await openAIService.generateComment({ content })
 
       // Parse the response - it might return as a single string with separators
       let commentArray: string[] = []
@@ -268,7 +287,9 @@ function IndexSidePanel() {
   const handleCommentClick = (comment: string) => {
     // Check if extension is active before applying comment
     if (!isExtensionActive) {
-      showResponseStatusMessage('Extension is disabled. Enable it in settings first.')
+      showResponseStatusMessage(
+        'Extension is disabled. Enable it in settings first.'
+      )
       return
     }
 
@@ -307,6 +328,67 @@ function IndexSidePanel() {
     })
   }
 
+  // Generate random delay between 5-9 seconds
+  const getRandomDelay = () => {
+    return Math.floor(Math.random() * (9000 - 5000 + 1)) + 5000
+  }
+
+  // Auto comment function
+  const autoComment = async () => {
+    if (!isExtensionActive) {
+      showResponseStatusMessage(
+        'Extension is disabled. Enable it in settings first.'
+      )
+      return
+    }
+
+    setIsAutoCommenting(true)
+    setAutoCommentProgress({ current: 0, total: autoCommentTarget })
+
+    try {
+      // TODO: Implement auto comment logic
+      // This is a placeholder that will be implemented in the next step
+      console.log(`Starting auto comment for ${autoCommentTarget} posts...`)
+
+      // Placeholder for demonstration
+      for (let i = 1; i <= autoCommentTarget; i++) {
+        if (!isAutoCommenting) break // Check if stopped
+
+        setAutoCommentProgress({ current: i, total: autoCommentTarget })
+
+        // TODO: Actual comment logic will go here
+        // 1. Find next post
+        // 2. Extract post content
+        // 3. Generate comment using AI
+        // 4. Post comment
+        // 5. Wait random delay
+
+        const delay = getRandomDelay()
+        console.log(
+          `Processed post ${i}/${autoCommentTarget}, waiting ${delay / 1000}s...`
+        )
+        await new Promise((resolve) => setTimeout(resolve, delay))
+      }
+
+      showResponseStatusMessage(
+        `Auto commenting complete! Processed ${autoCommentTarget} posts.`
+      )
+    } catch (error) {
+      showResponseStatusMessage(
+        'Auto commenting failed: ' + (error as Error).message
+      )
+    } finally {
+      setIsAutoCommenting(false)
+      setAutoCommentProgress({ current: 0, total: 0 })
+    }
+  }
+
+  // Stop auto commenting
+  const stopAutoComment = () => {
+    setIsAutoCommenting(false)
+    showResponseStatusMessage('Auto commenting stopped.')
+  }
+
   return (
     <div className="flex flex-col h-screen w-full">
       <div className="flex border-b border-secondary">
@@ -318,6 +400,15 @@ function IndexSidePanel() {
           }`}
           onClick={() => handleTabClick('comment')}>
           Comment
+        </button>
+        <button
+          className={`py-2 px-4 font-medium ${
+            activeTab === 'autoComment'
+              ? 'border-b-2 border-primary'
+              : 'hover:bg-secondary'
+          }`}
+          onClick={() => handleTabClick('autoComment')}>
+          Auto Comment
         </button>
         <button
           className={`py-2 px-4 font-medium ${
@@ -351,8 +442,9 @@ function IndexSidePanel() {
                 <div
                   key={index}
                   className={`comment-variant pt-5 p-4 transition-all duration-200 border-l-[3px] border-accent relative ${
-                    isExtensionActive && !comment.includes('Extension is disabled')
-                      ? 'bg-secondary cursor-pointer hover:bg-white hover:-translate-y-0.5 hover:shadow-md after:content-[\'Click_to_use\'] after:absolute after:top-1 after:right-2 after:text-xs after:opacity-0 after:text-accent after:transition-opacity hover:after:opacity-100'
+                    isExtensionActive &&
+                    !comment.includes('Extension is disabled')
+                      ? "bg-secondary cursor-pointer hover:bg-white hover:-translate-y-0.5 hover:shadow-md after:content-['Click_to_use'] after:absolute after:top-1 after:right-2 after:text-xs after:opacity-0 after:text-accent after:transition-opacity hover:after:opacity-100"
                       : 'bg-gray-100 cursor-not-allowed opacity-60'
                   }`}
                   data-idx={index}
@@ -365,10 +457,63 @@ function IndexSidePanel() {
           </div>
         )}
 
+        {activeTab === 'autoComment' && (
+          <div id="autoCommentTab" className="auto-comment-tab pt-4">
+            <div className="flex flex-col gap-4">
+              <h3 className="text-lg font-semibold">Auto Comment Mode</h3>
+              <p className="text-sm text-gray-600">
+                Automatically comment on {autoCommentTarget} LinkedIn posts with
+                AI-generated comments.
+              </p>
+
+              {isAutoCommenting && (
+                <div className="bg-blue-50 border-l-4 border-blue-500 p-4">
+                  <p className="font-semibold text-blue-700">
+                    Commenting in progress...
+                  </p>
+                  <p className="text-sm text-blue-600 mt-1">
+                    Progress: {autoCommentProgress.current} /{' '}
+                    {autoCommentProgress.total}
+                  </p>
+                </div>
+              )}
+
+              <div className="flex gap-4">
+                {!isAutoCommenting ? (
+                  <button
+                    className={`flex-1 py-3 px-4 font-medium text-white cursor-pointer transition-all duration-200 ${
+                      isExtensionActive
+                        ? 'bg-accent hover:bg-opacity-80'
+                        : 'bg-gray-300 cursor-not-allowed'
+                    }`}
+                    onClick={autoComment}
+                    disabled={!isExtensionActive}>
+                    Start Auto Comment
+                  </button>
+                ) : (
+                  <button
+                    className="flex-1 bg-red-500 text-white py-3 px-4 font-medium cursor-pointer transition-all duration-200 hover:bg-red-600"
+                    onClick={stopAutoComment}>
+                    Stop Auto Comment
+                  </button>
+                )}
+              </div>
+
+              <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4 mt-4">
+                <p className="text-sm text-yellow-700">
+                  <strong>Note:</strong> The extension will wait 5-9 seconds
+                  (random) between each comment to avoid being flagged by
+                  LinkedIn. Make sure you're on your LinkedIn feed page before
+                  starting.
+                </p>
+              </div>
+            </div>
+            <StatusDisplay message={responseStatusMessage} />
+          </div>
+        )}
+
         {activeTab === 'settings' && (
-          <div
-            id="settingsTab"
-            className="settings-tab pt-4 flex flex-col">
+          <div id="settingsTab" className="settings-tab pt-4 flex flex-col">
             <div className="flex items-center justify-between relative gap-2">
               <label className="block font-medium" htmlFor="activeToggle">
                 Enable Extension
@@ -381,7 +526,43 @@ function IndexSidePanel() {
                 onChange={(e) => setIsExtensionActive(e.target.checked)}
               />
             </div>
-            <div className='mt-4'>
+            <div className="flex items-center justify-between relative gap-2">
+              <label className="block font-medium" htmlFor="activeToggle">
+                100x Mode
+              </label>
+              <input
+                type="checkbox"
+                id="activeToggle"
+                ref={activeToggleRef}
+                checked={isExtensionActive}
+                onChange={(e) => setIsExtensionActive(e.target.checked)}
+              />
+            </div>
+            <div className="flex items-center justify-between relative gap-2">
+              <label className="block font-medium" htmlFor="apiKey">
+                API Key
+              </label>
+              <input
+                type="password"
+                id="apiKey"
+                onChange={(e) => setApiKey(e.target.value)}
+              />
+            </div>
+            <div className="flex items-center justify-between relative gap-2 mt-2">
+              <label className="block font-medium" htmlFor="autoCommentTarget">
+                Number of Auto Comments
+              </label>
+              <input
+                type="number"
+                id="autoCommentTarget"
+                ref={autoCommentTargetRef}
+                defaultValue={autoCommentTarget}
+                min="1"
+                max="100"
+                className="w-20 p-2 border-2 focus:outline-none"
+              />
+            </div>
+            <div className="mt-4">
               <label className="block font-medium" htmlFor="customPrompt">
                 Instrudctions:
               </label>
