@@ -5,8 +5,8 @@
  */
 
 import { GoogleGenAI } from '@google/genai'
-import { AI_SETTINGS } from '~lib/constants'
 
+import { AI_SETTINGS } from '~lib/constants'
 import { getApiKey } from '~lib/storageEvents'
 
 interface GeminiError extends Error {
@@ -29,29 +29,36 @@ export class GeminiService {
   }): Promise<string | string[]> {
     try {
       const apiKey = await getApiKey()
-      if (!apiKey) return
+      if (!apiKey) return []
 
       const ai = new GoogleGenAI({ apiKey })
 
-      const response = await ai.models.generateContent({
+      // Generate content using the correct API structure
+      const result = await ai.models.generateContent({
         model: AI_SETTINGS.MODEL,
         contents: content,
         config: {
           temperature: AI_SETTINGS.TEMPERATURE,
-          candidateCount: isSingleCommentMode ? AI_SETTINGS.N : 1,
+          candidateCount: isSingleCommentMode ? AI_SETTINGS.N : 1
         }
       })
 
-      const data = response.text
-      if (!response.) {
-        throw new Error(data.error?.message || 'API Error')
+      if (!result || !result.text) {
+        throw new Error('API returned no response')
       }
 
-      let result = (data.choices || []).map(
-        (choice: { message: { content: string } }) =>
-          choice.message?.content?.trim() || ''
-      )
-      return result
+      const text = result.text
+
+      // For single comment mode, return as array for consistency
+      if (isSingleCommentMode) {
+        // Split by common separators if multiple variants in one response
+        const variants = text
+          .split(/\n---\n|\n\n---\n\n/)
+          .filter((v) => v.trim())
+        return variants.length > 0 ? variants : [text]
+      }
+
+      return text
     } catch (error) {
       const enhancedError = new Error(
         error instanceof Error ? error.message : 'Unknown error'
@@ -82,6 +89,76 @@ export class GeminiService {
       }
 
       throw enhancedError
+    }
+  }
+
+  /**
+   * Validate API key by making a test call to Gemini API
+   * @param apiKey - The API key to validate
+   * @returns {Promise<{ valid: boolean; message: string }>} - Validation result
+   */
+  async validateApiKey(
+    apiKey: string
+  ): Promise<{ valid: boolean; message: string }> {
+    try {
+      if (!apiKey || apiKey.trim() === '') {
+        return {
+          valid: false,
+          message: 'API key cannot be empty'
+        }
+      }
+
+      const ai = new GoogleGenAI({ apiKey })
+
+      // Make a simple test call with minimal content
+      const result = await ai.models.generateContent({
+        model: AI_SETTINGS.MODEL,
+        contents: 'Say "API key is valid" in one word',
+        config: {
+          temperature: 0.1,
+          candidateCount: 1
+        }
+      })
+
+      if (!result || !result.text) {
+        return {
+          valid: false,
+          message: 'API returned no response'
+        }
+      }
+
+      return {
+        valid: true,
+        message: 'API key is valid!'
+      }
+    } catch (error) {
+      let errorMessage = 'Invalid API key'
+
+      if (error instanceof Error) {
+        if (
+          error.message.includes('API key') ||
+          error.message.includes('authentication')
+        ) {
+          errorMessage = 'Invalid API key. Please check your key and try again.'
+        } else if (
+          error.message.includes('rate limit') ||
+          error.message.includes('quota')
+        ) {
+          errorMessage = 'API rate limit exceeded. Please try again later.'
+        } else if (
+          error.message.includes('network') ||
+          error.message.includes('connect')
+        ) {
+          errorMessage = 'Network error. Please check your internet connection.'
+        } else {
+          errorMessage = error.message || 'Failed to validate API key'
+        }
+      }
+
+      return {
+        valid: false,
+        message: errorMessage
+      }
     }
   }
 }

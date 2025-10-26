@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import './style.css'
 
 import { DEFAULT_PROMPT } from './lib/constants'
-import { setApiKey, setupLastPostTextWatcher } from './lib/storageEvents'
+import { setupLastPostTextWatcher } from './lib/storageEvents'
 import openAIService from './services/gemini'
 import StorageService, { STORAGE_KEYS } from './services/storage'
 
@@ -48,12 +48,14 @@ function IndexSidePanel() {
   >('comment')
   const [isExtensionActive, setIsExtensionActive] = useState(true)
   const [promptText, setPromptText] = useState('')
+  const [apiKeyInput, setApiKeyInput] = useState('')
   const [comments, setComments] = useState<string[]>([
     'Loading...',
     'Loading...',
     'Loading...'
   ])
   const [fetchingComments, setFetchingComments] = useState(false)
+  const [isSavingSettings, setIsSavingSettings] = useState(false)
 
   // Auto comment states
   const [isAutoCommenting, setIsAutoCommenting] = useState(false)
@@ -98,9 +100,27 @@ function IndexSidePanel() {
       }
     }
 
+    // Listen for open settings events
+    const handleOpenSettings = (e: CustomEvent) => {
+      setActiveTab('settings')
+    }
+
+    // Listen for messages from background script
+    const handleBackgroundMessage = (message: any) => {
+      if (message.action === 'openSettingsTab') {
+        setActiveTab('settings')
+      }
+    }
+
+    chrome.runtime.onMessage.addListener(handleBackgroundMessage)
+
     document.addEventListener(
       'storage-change',
       handleStorageChange as EventListener
+    )
+    document.addEventListener(
+      'open-settings',
+      handleOpenSettings as EventListener
     )
 
     return () => {
@@ -108,6 +128,11 @@ function IndexSidePanel() {
         'storage-change',
         handleStorageChange as EventListener
       )
+      document.removeEventListener(
+        'open-settings',
+        handleOpenSettings as EventListener
+      )
+      chrome.runtime.onMessage.removeListener(handleBackgroundMessage)
     }
   }, [])
 
@@ -125,7 +150,8 @@ function IndexSidePanel() {
         STORAGE_KEYS.CUSTOM_PROMPT,
         STORAGE_KEYS.EXTENSION_ACTIVE,
         STORAGE_KEYS.DEFAULT_PROMPT,
-        STORAGE_KEYS.AUTO_COMMENT_TARGET
+        STORAGE_KEYS.AUTO_COMMENT_TARGET,
+        'API_KEY'
       ])
 
       // If user has a custom prompt saved, use that
@@ -145,34 +171,67 @@ function IndexSidePanel() {
 
       setIsExtensionActive(result[STORAGE_KEYS.EXTENSION_ACTIVE] !== false)
       setAutoCommentTarget(result[STORAGE_KEYS.AUTO_COMMENT_TARGET] || 30)
+      setApiKeyInput(result['API_KEY'] || '')
     } catch (error) {
       showStatusMessage('Error loading settings')
     }
   }
 
-  // Save settings
+  // Save settings with API key validation
   const saveSettings = async () => {
+    if (isSavingSettings) return
+
+    setIsSavingSettings(true)
+    clearStatusMessage()
+
     try {
+      // Validate API key if it's provided and changed
+      if (apiKeyInput && apiKeyInput.trim() !== '') {
+        showStatusMessage('Validating API key...')
+
+        const validation = await openAIService.validateApiKey(
+          apiKeyInput.trim()
+        )
+
+        if (!validation.valid) {
+          showStatusMessage(validation.message)
+          setIsSavingSettings(false)
+          return
+        }
+
+        showStatusMessage('API key validated successfully!')
+      }
+
+      // Save all settings
       await StorageService.setData({
-        [STORAGE_KEYS.CUSTOM_PROMPT]: promptInputRef.current?.value,
-        [STORAGE_KEYS.EXTENSION_ACTIVE]: activeToggleRef.current?.checked,
+        [STORAGE_KEYS.CUSTOM_PROMPT]: promptInputRef.current?.value || '',
+        [STORAGE_KEYS.EXTENSION_ACTIVE]:
+          activeToggleRef.current?.checked ?? true,
         [STORAGE_KEYS.AUTO_COMMENT_TARGET]: parseInt(
           autoCommentTargetRef.current?.value || '30'
-        )
+        ),
+        API_KEY: apiKeyInput.trim()
       })
 
+      // Update local state
       setPromptText(promptInputRef.current?.value || '')
-      setIsExtensionActive(activeToggleRef.current?.checked || false)
+      setIsExtensionActive(activeToggleRef.current?.checked ?? true)
       setAutoCommentTarget(
         parseInt(autoCommentTargetRef.current?.value || '30')
       )
 
-      showStatusMessage('Settings saved!')
+      showStatusMessage('All settings saved successfully!')
 
-      // Refresh comments to reflect the new active state
-      fetchVariants()
-    } catch (error) {
-      showStatusMessage('Error saving settings')
+      // Refresh comments to reflect the new settings
+      if (apiKeyInput && apiKeyInput.trim() !== '') {
+        setTimeout(() => {
+          fetchVariants()
+        }, 500)
+      }
+    } catch (error: any) {
+      showStatusMessage(error.message || 'Error saving settings')
+    } finally {
+      setIsSavingSettings(false)
     }
   }
 
@@ -513,8 +572,11 @@ function IndexSidePanel() {
         )}
 
         {activeTab === 'settings' && (
-          <div id="settingsTab" className="settings-tab pt-4 flex flex-col">
-            <div className="flex items-center justify-between relative gap-2">
+          <div
+            id="settingsTab"
+            className="settings-tab pt-4 flex flex-col gap-4">
+            {/* Extension Active Toggle */}
+            <div className="flex items-center justify-between gap-2 pb-3 border-b">
               <label className="block font-medium" htmlFor="activeToggle">
                 Enable Extension
               </label>
@@ -524,31 +586,37 @@ function IndexSidePanel() {
                 ref={activeToggleRef}
                 checked={isExtensionActive}
                 onChange={(e) => setIsExtensionActive(e.target.checked)}
+                className="w-5 h-5 cursor-pointer"
               />
             </div>
-            <div className="flex items-center justify-between relative gap-2">
-              <label className="block font-medium" htmlFor="activeToggle">
-                100x Mode
-              </label>
-              <input
-                type="checkbox"
-                id="activeToggle"
-                ref={activeToggleRef}
-                checked={isExtensionActive}
-                onChange={(e) => setIsExtensionActive(e.target.checked)}
-              />
-            </div>
-            <div className="flex items-center justify-between relative gap-2">
+
+            {/* API Key Section */}
+            <div className="flex flex-col gap-2">
               <label className="block font-medium" htmlFor="apiKey">
-                API Key
+                Google Gemini API Key
               </label>
               <input
                 type="password"
                 id="apiKey"
-                onChange={(e) => setApiKey(e.target.value)}
+                value={apiKeyInput}
+                onChange={(e) => setApiKeyInput(e.target.value)}
+                placeholder="Enter your API key"
+                className="w-full p-2 border-2 focus:outline-none focus:border-accent"
               />
+              <p className="text-xs text-gray-500">
+                Get your API key from{' '}
+                <a
+                  href="https://aistudio.google.com/apikey"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent hover:underline">
+                  Google AI Studio
+                </a>
+              </p>
             </div>
-            <div className="flex items-center justify-between relative gap-2 mt-2">
+
+            {/* Auto Comment Target */}
+            <div className="flex items-center justify-between gap-2">
               <label className="block font-medium" htmlFor="autoCommentTarget">
                 Number of Auto Comments
               </label>
@@ -559,42 +627,52 @@ function IndexSidePanel() {
                 defaultValue={autoCommentTarget}
                 min="1"
                 max="100"
-                className="w-20 p-2 border-2 focus:outline-none"
+                className="w-20 p-2 border-2 focus:outline-none focus:border-accent"
               />
             </div>
-            <div className="mt-4">
+
+            {/* Custom Prompt Section */}
+            <div className="flex flex-col gap-2">
               <label className="block font-medium" htmlFor="customPrompt">
-                Instrudctions:
+                Instructions:
               </label>
-              <p className="text-xs mb-2 italic text-black/50">
+              <p className="text-xs mb-1 italic text-black/50">
                 {promptText === DEFAULT_PROMPT
                   ? 'This is the default prompt. You can customize it to control how the AI generates comments.'
                   : "You're using a custom prompt. You can reset to the default using the button below."}
               </p>
               <textarea
-                className="w-full p-3 mb-2 border-2 resize-y transition-all duration-200 ease-in-out min-h-[200px]
-                focus:outline-none"
+                className="w-full p-3 border-2 resize-y transition-all duration-200 ease-in-out min-h-[200px]
+                focus:outline-none focus:border-accent"
                 id="customPrompt"
                 rows={8}
                 ref={promptInputRef}
                 value={promptText}
                 onChange={(e) => setPromptText(e.target.value)}
               />
-              <div className="flex gap-4">
+              <div className="flex justify-end">
                 <button
-                  className="flex-1 bg-accent text-white py-3 px-4 cursor-pointer transition-all duration-200 text-sm"
-                  id="savePrompt"
-                  onClick={saveSettings}>
-                  Save Prompt
-                </button>
-                <button
-                  className="flex-1 bg-accent text-white py-3 px-4 cursor-pointer transition-all duration-200 text-sm"
-                  id="resetPrompt"
-                  onClick={resetToDefault}>
-                  Reset to Default
+                  className="bg-gray-700 text-white py-2 px-4 text-xs  cursor-pointer transition-all duration-200 hover:font-medium hover:bg-gray-900"
+                  onClick={resetToDefault}
+                  disabled={isSavingSettings}>
+                  Reset Prompt
                 </button>
               </div>
             </div>
+
+            <button
+              className={`w-full py-3 px-4 font-medium text-white cursor-pointer transition-all duration-200 mt-4 ${
+                isSavingSettings || !apiKeyInput.trim() || !promptText.trim()
+                  ? 'bg-gray-400 cursor-not-allowed'
+                  : 'bg-accent hover:bg-opacity-80'
+              }`}
+              onClick={saveSettings}
+              disabled={
+                isSavingSettings || !apiKeyInput.trim() || !promptText.trim()
+              }>
+              {isSavingSettings ? 'Saving...' : 'Save Settings'}
+            </button>
+
             <StatusDisplay message={statusMessage} />
           </div>
         )}
