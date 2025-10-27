@@ -49,6 +49,8 @@ export class GeminiService {
         }
       })
 
+      console.log('Gemini generateComment result:', result)
+
       if (!result || !result.candidates || result.candidates.length === 0) {
         return [
           'Error generating comment variants',

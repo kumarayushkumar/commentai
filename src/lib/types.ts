@@ -3,17 +3,18 @@
  */
 
 export interface AISettings {
-  MODEL: string;
-  TEMPERATURE: number;
-  N: number;
+  MODEL: string
+  TEMPERATURE: number
+  N: number
 }
 
 export interface LinkedInSelectors {
-  COMMENT_BUTTON: string;
-  COMMENT_BOX: string;
-  COMMENT_INPUT: string;
-  POST_CONTAINER: string;
-  POST_CONTENT: string;
+  COMMENT_BUTTON: string
+  COMMENT_BOX: string
+  COMMENT_INPUT: string
+  POST_CONTAINER: string
+  POST_CONTENT: string
+  SUBMIT_COMMENT_BUTTON: string
 }
 
 declare global {

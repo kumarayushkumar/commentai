@@ -25,7 +25,8 @@ export const LINKEDIN_SELECTORS: LinkedInSelectors = {
   COMMENT_INPUT: '[data-test-ql-editor-contenteditable="true"]',
   POST_CONTAINER: '.feed-shared-update-v2, .scaffold-finite-scroll__content',
   POST_CONTENT:
-    '.feed-shared-update-v2__description, .update-components-text, [data-test-feed-shared-text]'
+    '.feed-shared-update-v2__description, .update-components-text, [data-test-feed-shared-text]',
+  SUBMIT_COMMENT_BUTTON: '.comments-comment-box__submit-button--cr'
 }
 
 /**

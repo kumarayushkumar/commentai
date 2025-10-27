@@ -10,6 +10,9 @@ import { showNotification } from './lib/notification'
 import StorageService, { STORAGE_KEYS } from './services/storage'
 
 ;(function () {
+  // Flag to track if auto-commenting is in progress
+  let isAutoCommenting = false
+
   function initExtension() {
     // Track URL changes to reinitialize on navigation
     let lastUrl = location.href
@@ -61,6 +64,11 @@ import StorageService, { STORAGE_KEYS } from './services/storage'
 
     // Handle comment button click
     async function handleCommentClick(this: HTMLElement, event: MouseEvent) {
+      // Skip side panel opening if auto-commenting is in progress
+      if (isAutoCommenting) {
+        return
+      }
+
       // Check if extension is active
       const result = await StorageService.getData(STORAGE_KEYS.EXTENSION_ACTIVE)
       const isActive = result[STORAGE_KEYS.EXTENSION_ACTIVE] !== false
@@ -141,7 +149,12 @@ import StorageService, { STORAGE_KEYS } from './services/storage'
   }
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.action === 'fillCommentBox' && message.comment) {
+    if (message.action === 'setAutoCommentingMode') {
+      // Set the auto-commenting flag
+      isAutoCommenting = message.enabled || false
+      sendResponse({ success: true })
+      return true
+    } else if (message.action === 'fillCommentBox' && message.comment) {
       // Find the active post marked by the side panel
       const activePost = document.querySelector('.active-post')
 
@@ -165,6 +178,95 @@ import StorageService, { STORAGE_KEYS } from './services/storage'
       }
 
       sendResponse({ success: true })
+      return true
+    } else if (message.action === 'getNextPost') {
+      // Get all posts on the page
+      const posts = document.querySelectorAll(LINKEDIN_SELECTORS.POST_CONTAINER)
+      const index = message.index || 0
+
+      if (posts[index]) {
+        const postElement = posts[index] as HTMLElement
+        const postText = extractPostText(postElement)
+
+        // Mark this post as active for auto-commenting
+        document.querySelectorAll('.auto-comment-active').forEach((post) => {
+          post.classList.remove('auto-comment-active')
+        })
+        postElement.classList.add('auto-comment-active')
+
+        sendResponse({ success: true, postText })
+      } else {
+        sendResponse({ success: false, error: 'No more posts found' })
+      }
+      return true
+    } else if (message.action === 'autoFillAndSubmitComment') {
+      // Find the post at the specified index
+      const posts = document.querySelectorAll(LINKEDIN_SELECTORS.POST_CONTAINER)
+      const index = message.postIndex || 0
+      const post = posts[index] as HTMLElement
+
+      if (post) {
+        // First, click the comment button to open the comment box
+        const commentButton = post.querySelector(
+          LINKEDIN_SELECTORS.COMMENT_BUTTON
+        ) as HTMLElement
+
+        if (commentButton) {
+          commentButton.click()
+
+          // Wait for the comment box to appear
+          setTimeout(() => {
+            const commentBox = post.querySelector(
+              '[contenteditable="true"][role="textbox"]'
+            )
+
+            if (commentBox) {
+              // Fill the comment
+              commentBox.textContent = message.comment
+
+              const inputEvent = new Event('input', { bubbles: true })
+              commentBox.dispatchEvent(inputEvent)
+
+              // Wait a bit for LinkedIn to process the input, then find and click the Post button
+              setTimeout(() => {
+                // Find the submit/post button using the constant
+                const submitButton = post.querySelector(
+                  LINKEDIN_SELECTORS.SUBMIT_COMMENT_BUTTON + ':not([disabled])'
+                ) as HTMLElement
+
+                if (submitButton) {
+                  submitButton.click()
+                  sendResponse({ success: true })
+                } else {
+                  sendResponse({
+                    success: false,
+                    error: 'Submit button not found or disabled'
+                  })
+                }
+              }, 500)
+            } else {
+              sendResponse({ success: false, error: 'Comment box not found' })
+            }
+          }, 500)
+        } else {
+          sendResponse({ success: false, error: 'Comment button not found' })
+        }
+      } else {
+        sendResponse({ success: false, error: 'Post not found' })
+      }
+
+      return true // Required for async sendResponse
+    } else if (message.action === 'scrollToNextPost') {
+      // Scroll down to load more posts
+      window.scrollBy({
+        top: 600, // Scroll down by 600px
+        behavior: 'smooth'
+      })
+
+      sendResponse({ success: true })
+      return true
     }
+
+    return true // Required for async sendResponse
   })
 })()

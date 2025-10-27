@@ -82,8 +82,7 @@ class StorageService {
       await Promise.all(
         Object.entries(data).map(([key, value]) => storage.set(key, value))
       )
-    } catch (error) {
-    }
+    } catch (error) {}
   }
 
   /**
@@ -95,7 +94,10 @@ class StorageService {
       await storage.get('test')
       return true
     } catch (error) {
-      showNotification('Storage is not accessible.', 'error')
+      showNotification(
+        'Storage is not accessible. Please check permissions.',
+        'error'
+      )
       return false
     }
   }

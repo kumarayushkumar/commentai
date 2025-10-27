@@ -63,13 +63,13 @@ function IndexSidePanel() {
   useEffect(() => {
     loadSettings()
     setupLastPostTextWatcher()
-    fetchVariants(showResponseStatusMessage)
+    fetchVariants()
 
     // Listen for storage changes
     const handleStorageChange = (e: CustomEvent) => {
       if (e.detail.key === STORAGE_KEYS.LAST_POST_TEXT) {
         setActiveTab('comment')
-        setTimeout(() => fetchVariants(showResponseStatusMessage), 100)
+        setTimeout(() => fetchVariants(), 100)
       }
     }
 
@@ -93,6 +93,7 @@ function IndexSidePanel() {
       handleOpenSettings as EventListener
     )
 
+    // Cleanup function: clear last post text when side panel is closed
     return () => {
       chrome.runtime.onMessage.removeListener(handleBackgroundMessage)
       document.removeEventListener(
@@ -103,13 +104,17 @@ function IndexSidePanel() {
         'open-settings',
         handleOpenSettings as EventListener
       )
+
+      StorageService.setData({
+        [STORAGE_KEYS.LAST_POST_TEXT]: ''
+      })
     }
   }, [])
 
   // Watch for extension active state changes
   useEffect(() => {
     if (activeTab === 'comment') {
-      fetchVariants(showResponseStatusMessage)
+      fetchVariants()
     }
   }, [isExtensionActive])
 
@@ -126,7 +131,7 @@ function IndexSidePanel() {
     const success = await saveSettings(showStatusMessage, showStatusMessage)
     if (success && apiKeyInput.trim() !== '') {
       setTimeout(() => {
-        fetchVariants(showResponseStatusMessage)
+        fetchVariants()
       }, 500)
     }
   }
@@ -136,7 +141,7 @@ function IndexSidePanel() {
   }
 
   const handleRefreshComments = () => {
-    fetchVariants(showResponseStatusMessage)
+    fetchVariants()
   }
 
   const handleCommentSelect = (comment: string) => {

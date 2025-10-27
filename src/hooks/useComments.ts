@@ -17,7 +17,7 @@ export const useComments = () => {
   const [fetchingComments, setFetchingComments] = useState(false)
 
   // Fetch comment variants from AI service
-  const fetchVariants = async (showMessage: (message: string) => void) => {
+  const fetchVariants = async () => {
     if (fetchingComments) return
 
     setFetchingComments(true)
