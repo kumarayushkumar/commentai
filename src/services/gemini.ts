@@ -7,6 +7,7 @@
 import { GoogleGenAI } from '@google/genai'
 
 import { AI_SETTINGS } from '~lib/constants'
+import { showNotification } from '~lib/notification'
 import { getApiKey } from '~lib/storageEvents'
 
 interface GeminiError extends Error {
@@ -18,7 +19,7 @@ export class GeminiService {
    * Generate a comment for a LinkedIn post
    * @param content - The content of the LinkedIn post and prompt
    * @param isSingleCommentMode - Whether to generate a single comment or multiple
-   * @returns Generated comment(s)
+   * @returns Generated comment(s) or false if error
    */
   async generateComment({
     content,
@@ -26,20 +27,13 @@ export class GeminiService {
   }: {
     content: string
     isSingleCommentMode?: boolean
-  }): Promise<string | string[]> {
+  }): Promise<string | string[] | false> {
     try {
       const apiKey = await getApiKey()
-      if (!apiKey) {
-        return [
-          'Error generating comment variants',
-          'Error generating comment variants',
-          'Error generating comment variants'
-        ]
-      }
+      if (!apiKey) return false
 
       const ai = new GoogleGenAI({ apiKey })
 
-      // Generate content using the correct API structure
       const result = await ai.models.generateContent({
         model: AI_SETTINGS.MODEL,
         contents: content,
@@ -49,14 +43,9 @@ export class GeminiService {
         }
       })
 
-      console.log('Gemini generateComment result:', result)
-
       if (!result || !result.candidates || result.candidates.length === 0) {
-        return [
-          'Error generating comment variants',
-          'Error generating comment variants',
-          'Error generating comment variants'
-        ]
+        showNotification('No response from AI. Please try again.', 'error')
+        return false
       }
 
       // Extract text from all candidates
@@ -64,19 +53,64 @@ export class GeminiService {
         .map((candidate) => candidate.content?.parts?.[0]?.text)
         .filter((text) => text && text.trim())
 
-      return comments.length > 0
-        ? comments
-        : [
-            'Error generating comment variants',
-            'Error generating comment variants',
-            'Error generating comment variants'
-          ]
-    } catch (error) {
-      return [
-        'Error generating comment variants',
-        'Error generating comment variants',
-        'Error generating comment variants'
-      ]
+      if (comments.length === 0) {
+        showNotification(
+          'AI returned empty response. Please try again.',
+          'error'
+        )
+        return false
+      }
+
+      return comments
+    } catch (error: any) {
+      // Parse error for quota/rate limit issues
+      if (error?.message) {
+        try {
+          const errorData = JSON.parse(error.message)
+          if (errorData?.error) {
+            const errorCode = errorData.error.code
+            const errorStatus = errorData.error.status
+
+            // Handle quota exceeded
+            if (errorCode === 429 || errorStatus === 'RESOURCE_EXHAUSTED') {
+              // Extract retry delay if available
+              const retryInfo = errorData.error.details?.find((d: any) =>
+                d['@type']?.includes('RetryInfo')
+              )
+              const retryDelay = retryInfo?.retryDelay
+
+              if (retryDelay) {
+                const seconds = parseInt(retryDelay) || 60
+                const minutes = Math.ceil(seconds / 60)
+                showNotification(
+                  `Gemini API quota exceeded. You've reached your daily limit of 200 requests. Please try again in ${minutes} minute(s).`,
+                  'error'
+                )
+                return false
+              }
+
+              showNotification(
+                `Gemini API quota exceeded. You've reached your daily limit. Please try again later or upgrade your plan.`,
+                'error'
+              )
+              return false
+            }
+
+            // Handle other API errors
+            if (errorData.error.message) {
+              const shortMessage = errorData.error.message.split('.')[0]
+              showNotification(`API Error: ${shortMessage}`, 'error')
+              return false
+            }
+          }
+        } catch {
+        }
+      }
+
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error'
+      showNotification(`Failed to generate comment: ${errorMessage}`, 'error')
+      return false
     }
   }
 
@@ -95,6 +129,7 @@ export class GeminiService {
           message: 'API key cannot be empty'
         }
       }
+      console.log('Validating Gemini API key...', apiKey)
 
       const ai = new GoogleGenAI({ apiKey })
 

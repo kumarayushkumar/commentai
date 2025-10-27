@@ -58,6 +58,13 @@ export const useComments = () => {
 
     const generatedComments = await geminiService.generateComment({ content })
 
+    // Check if generation failed
+    if (generatedComments === false) {
+      setComments([])
+      setFetchingComments(false)
+      return
+    }
+
     setComments(
       Array.isArray(generatedComments) && generatedComments.length > 0
         ? generatedComments
