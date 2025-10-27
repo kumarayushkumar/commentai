@@ -13,6 +13,58 @@ import StorageService, { STORAGE_KEYS } from './services/storage'
   // Flag to track if auto-commenting is in progress
   let isAutoCommenting = false
 
+  // Store the current user's LinkedIn profile URL
+  let currentUserProfileUrl = ''
+
+  // Function to get current user's LinkedIn profile URL
+  function getCurrentUserProfileUrl() {
+    if (currentUserProfileUrl) return currentUserProfileUrl
+
+    // Try to find the user's profile link in the navigation
+    const profileLink = document.querySelector(
+      'a[href*="/in/"]'
+    ) as HTMLAnchorElement
+    if (profileLink && profileLink.href.includes('/in/')) {
+      const match = profileLink.href.match(/\/in\/([^/?]+)/)
+      if (match) {
+        currentUserProfileUrl = match[1] // Extract username like "ayushkumarkumar"
+        return currentUserProfileUrl
+      }
+    }
+    return ''
+  }
+
+  // Function to check if we've already commented on a post
+  function hasAlreadyCommented(postElement: HTMLElement): boolean {
+    const userProfileUrl = getCurrentUserProfileUrl()
+    if (!userProfileUrl) return false
+
+    // Look for comments in the post - try multiple selectors
+    const commentLinks = postElement.querySelectorAll(
+      'a.comments-comment-meta__description-container, a[href*="/in/"]:has(.comments-comment-meta__description)'
+    )
+
+    for (const link of commentLinks) {
+      const href = (link as HTMLAnchorElement).href
+      // Check if this comment is from the current user
+      if (href && href.includes(`/in/${userProfileUrl}`)) {
+        // Check for "You" indicator in multiple ways
+        const linkText = link.textContent || ''
+        if (linkText.includes('You') || linkText.includes('• You')) {
+          return true
+        }
+
+        // Also check in the meta data span
+        const commentMeta = link.querySelector('.comments-comment-meta__data')
+        if (commentMeta && commentMeta.textContent?.includes('You')) {
+          return true
+        }
+      }
+    }
+
+    return false
+  }
+
   function initExtension() {
     // Track URL changes to reinitialize on navigation
     let lastUrl = location.href
@@ -182,28 +234,60 @@ import StorageService, { STORAGE_KEYS } from './services/storage'
     } else if (message.action === 'getNextPost') {
       // Get all posts on the page
       const posts = document.querySelectorAll(LINKEDIN_SELECTORS.POST_CONTAINER)
-      const index = message.index || 0
 
-      if (posts[index]) {
-        const postElement = posts[index] as HTMLElement
-        const postText = extractPostText(postElement)
+      // Find the first post that hasn't been commented on yet
+      let foundPost = null
+      let foundIndex = -1
+
+      for (let i = 0; i < posts.length; i++) {
+        const postElement = posts[i] as HTMLElement
+
+        // Check if we've already commented on this post (by checking actual comments)
+        if (hasAlreadyCommented(postElement)) {
+          postElement.dataset.autoCommented = 'true'
+          continue
+        }
+
+        // Skip if already commented on (backup check)
+        if (postElement.dataset.autoCommented === 'true') {
+          continue
+        }
+
+        // Check if the post is promoted
+        const promotedElement = postElement.querySelector(
+          LINKEDIN_SELECTORS.PROMOTED_POST
+        )
+        const isPromoted = promotedElement?.textContent?.includes('Promoted')
+
+        if (isPromoted) {
+          // Mark promoted posts so we don't check them again
+          postElement.dataset.autoCommented = 'true'
+          continue
+        }
+
+        // Found a valid post
+        foundPost = postElement
+        foundIndex = i
+        break
+      }
+
+      if (foundPost) {
+        const postText = extractPostText(foundPost)
 
         // Mark this post as active for auto-commenting
         document.querySelectorAll('.auto-comment-active').forEach((post) => {
           post.classList.remove('auto-comment-active')
         })
-        postElement.classList.add('auto-comment-active')
+        foundPost.classList.add('auto-comment-active')
 
-        sendResponse({ success: true, postText })
+        sendResponse({ success: true, postText, postIndex: foundIndex })
       } else {
         sendResponse({ success: false, error: 'No more posts found' })
       }
       return true
     } else if (message.action === 'autoFillAndSubmitComment') {
-      // Find the post at the specified index
-      const posts = document.querySelectorAll(LINKEDIN_SELECTORS.POST_CONTAINER)
-      const index = message.postIndex || 0
-      const post = posts[index] as HTMLElement
+      // Find the post with the auto-comment-active class
+      const post = document.querySelector('.auto-comment-active') as HTMLElement
 
       if (post) {
         // First, click the comment button to open the comment box
@@ -227,39 +311,68 @@ import StorageService, { STORAGE_KEYS } from './services/storage'
               const inputEvent = new Event('input', { bubbles: true })
               commentBox.dispatchEvent(inputEvent)
 
-              // Wait a bit for LinkedIn to process the input, then find and click the Post button
+              // Wait 500ms after filling the comment to let LinkedIn process it
               setTimeout(() => {
-                // Find the submit/post button using the constant
-                const submitButton = post.querySelector(
-                  LINKEDIN_SELECTORS.SUBMIT_COMMENT_BUTTON + ':not([disabled])'
-                ) as HTMLElement
+                // Wait another 500ms for LinkedIn to enable the submit button, then click it
+                setTimeout(() => {
+                  // Find the submit/post button using the constant
+                  const submitButton = post.querySelector(
+                    LINKEDIN_SELECTORS.SUBMIT_COMMENT_BUTTON +
+                      ':not([disabled])'
+                  ) as HTMLElement
 
-                if (submitButton) {
-                  submitButton.click()
-                  sendResponse({ success: true })
-                } else {
-                  sendResponse({
-                    success: false,
-                    error: 'Submit button not found or disabled'
-                  })
-                }
+                  if (submitButton) {
+                    submitButton.click()
+
+                    // Mark this post as commented
+                    post.dataset.autoCommented = 'true'
+
+                    // Close the comment box by clicking elsewhere or removing focus
+                    setTimeout(() => {
+                      // Try to close the comment section by clicking outside
+                      const commentBox = post.querySelector(
+                        '[contenteditable="true"][role="textbox"]'
+                      ) as HTMLElement
+                      if (commentBox) {
+                        commentBox.blur()
+                      }
+                    }, 300)
+
+                    sendResponse({ success: true })
+                  } else {
+                    sendResponse({
+                      success: false,
+                      error: 'Comment button disabled or not ready'
+                    })
+                  }
+                }, 500)
               }, 500)
             } else {
               sendResponse({ success: false, error: 'Comment box not found' })
             }
           }, 500)
         } else {
-          sendResponse({ success: false, error: 'Comment button not found' })
+          sendResponse({ success: false, error: 'Post has no comment button' })
         }
       } else {
-        sendResponse({ success: false, error: 'Post not found' })
+        sendResponse({ success: false, error: 'Post element not found' })
       }
 
       return true // Required for async sendResponse
+    } else if (message.action === 'markPostAsCommented') {
+      // Mark the currently active post as commented without actually commenting
+      const post = document.querySelector('.auto-comment-active') as HTMLElement
+      if (post) {
+        post.dataset.autoCommented = 'true'
+        sendResponse({ success: true })
+      } else {
+        sendResponse({ success: false, error: 'No active post found' })
+      }
+      return true
     } else if (message.action === 'scrollToNextPost') {
-      // Scroll down to load more posts
+      // Scroll down to load more posts - scroll more to trigger LinkedIn's infinite scroll
       window.scrollBy({
-        top: 600, // Scroll down by 600px
+        top: 800, // Scroll down by 800px (increased from 600px)
         behavior: 'smooth'
       })
 

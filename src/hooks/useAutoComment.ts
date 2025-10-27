@@ -4,6 +4,8 @@
 
 import { useRef, useState } from 'react'
 
+import { getRandomDelay } from '~lib/helpers'
+
 import geminiService from '../services/gemini'
 import StorageService, { STORAGE_KEYS } from '../services/storage'
 
@@ -14,10 +16,6 @@ export const useAutoComment = () => {
     total: 0
   })
   const stopRequestedRef = useRef(false)
-
-  const getRandomDelay = () => {
-    return Math.floor(Math.random() * (9000 - 5000 + 1)) + 5000
-  }
 
   const startAutoComment = async (
     target: number,
@@ -61,30 +59,56 @@ export const useAutoComment = () => {
         enabled: true
       })
 
-      for (let i = 1; i <= target; i++) {
+      let successfulComments = 0
+      let consecutiveNoPostFound = 0
+
+      while (successfulComments < target) {
         if (stopRequestedRef.current) {
-          showMessage(`Auto commenting stopped at ${i - 1}/${target} posts.`)
           break
         }
 
-        setAutoCommentProgress({ current: i, total: target })
-        showMessage(`Processing post ${i}/${target}...`)
-
-        // Send message to content script to get next post
-        const response = await chrome.tabs.sendMessage(activeTab.id, {
-          action: 'getNextPost',
-          index: i - 1
+        setAutoCommentProgress({
+          current: successfulComments,
+          total: target
         })
 
-        if (!response?.success || !response?.postText) {
+        // Step 1: Read the next uncommented post
+        const response = await chrome.tabs.sendMessage(activeTab.id, {
+          action: 'getNextPost'
+        })
+
+        if (!response?.success) {
+          consecutiveNoPostFound++
+
+          // If we can't find a post, scroll to load more and try again
+          if (consecutiveNoPostFound < 5) {
+            // Scroll more aggressively to trigger LinkedIn's infinite scroll
+            await chrome.tabs.sendMessage(activeTab.id, {
+              action: 'scrollToNextPost'
+            })
+            // Wait longer for posts to load after scrolling
+            await new Promise((resolve) => setTimeout(resolve, 3000))
+            continue
+          } else {
+            // After 5 attempts, no more posts available
+            showMessage(
+              `No more posts found. Completed ${successfulComments}/${target} comments.`
+            )
+            break
+          }
+        }
+
+        // Reset counter when we successfully find a post
+        consecutiveNoPostFound = 0
+
+        if (!response?.postText) {
           showMessage(
-            `No more posts found. Completed ${i - 1}/${target} posts.`
+            `No more posts found. Completed ${successfulComments}/${target} comments.`
           )
           break
         }
 
-        // Generate comment for this post
-        showMessage(`Generating comment for post ${i}/${target}...`)
+        // Step 2: Generate the comment
         const content = `This is a linked post,\n${response.postText}\n\n---\n${promptToUse}`
         const generatedComments = await geminiService.generateComment({
           content,
@@ -99,46 +123,70 @@ export const useAutoComment = () => {
         }
 
         if (!comment || comment.includes('Error generating')) {
-          showMessage(`Failed to generate comment for post ${i}. Skipping...`)
-          // Scroll to next post even if generation failed
+          showMessage(`Failed to generate comment. Skipping post...`)
+          // Mark the post as commented so we skip it next time
           await chrome.tabs.sendMessage(activeTab.id, {
-            action: 'scrollToNextPost'
+            action: 'markPostAsCommented'
           })
           continue
         }
 
-        // Send comment back to content script to fill and submit
-        showMessage(`Submitting comment on post ${i}/${target}...`)
+        // Step 3: Submit the comment
         const submitResponse = await chrome.tabs.sendMessage(activeTab.id, {
           action: 'autoFillAndSubmitComment',
-          comment,
-          postIndex: i - 1
+          comment
         })
 
-        if (submitResponse?.success) {
-          showMessage(`Comment submitted on post ${i}/${target}`)
-        } else {
-          showMessage(`Failed to submit comment on post ${i}/${target}`)
-        }
-
-        // Scroll to next post
-        if (i < target && !stopRequestedRef.current) {
-          showMessage(`Scrolling to next post...`)
+        if (!submitResponse?.success) {
+          // Only show message if there's a specific error, otherwise just skip silently
+          if (submitResponse?.error) {
+            showMessage(`Skipping post: ${submitResponse.error}`)
+          }
+          // Mark the post as commented so we skip it next time
           await chrome.tabs.sendMessage(activeTab.id, {
-            action: 'scrollToNextPost'
+            action: 'markPostAsCommented'
           })
-
-          // Wait random delay before processing next post
-          const delay = getRandomDelay()
-          showMessage(
-            `Waiting ${Math.round(delay / 1000)}s before next post...`
-          )
-          await new Promise((resolve) => setTimeout(resolve, delay))
+          continue
         }
+
+        // Wait for the comment to be fully submitted (LinkedIn processing time)
+        await new Promise((resolve) => setTimeout(resolve, 1500))
+
+        // Step 4: Increase the comment count
+        successfulComments++
+
+        // Update progress after successful comment
+        setAutoCommentProgress({
+          current: successfulComments,
+          total: target
+        })
+
+        // Check if we've reached the target
+        if (successfulComments >= target) {
+          break
+        }
+
+        // Step 5: Random delay
+        const delay = getRandomDelay()
+        await new Promise((resolve) => setTimeout(resolve, delay))
+
+        // Step 6: Scroll to load more posts for next iteration
+        await chrome.tabs.sendMessage(activeTab.id, {
+          action: 'scrollToNextPost'
+        })
+
+        // Wait for new posts to load
+        await new Promise((resolve) => setTimeout(resolve, 1000))
       }
 
       if (!stopRequestedRef.current) {
-        showMessage(`Auto commenting complete! Processed ${target} posts.`)
+        showMessage(
+          `Auto commenting complete! Successfully commented on ${successfulComments} posts.`
+        )
+      } else {
+        showMessage(
+          `Auto commenting stopped at ${successfulComments} comments.`
+        )
       }
     } catch (error) {
       showMessage('Auto commenting failed: ' + (error as Error).message)
@@ -159,6 +207,11 @@ export const useAutoComment = () => {
         // Ignore error if tab is closed
       }
 
+      // Clear the last post text
+      await StorageService.setData({
+        [STORAGE_KEYS.LAST_POST_TEXT]: ''
+      })
+
       setIsAutoCommenting(false)
       setAutoCommentProgress({ current: 0, total: 0 })
       stopRequestedRef.current = false
@@ -168,6 +221,11 @@ export const useAutoComment = () => {
   const stopAutoComment = async (showMessage: (message: string) => void) => {
     stopRequestedRef.current = true
     showMessage('Stopping auto comment...')
+
+    // Clear the last post text
+    await StorageService.setData({
+      [STORAGE_KEYS.LAST_POST_TEXT]: ''
+    })
 
     // Disable auto-commenting mode in content script
     try {

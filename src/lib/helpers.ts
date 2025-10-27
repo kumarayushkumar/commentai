@@ -4,20 +4,22 @@
  * @returns Extracted post text
  */
 export function extractPostText(postElement: HTMLElement | null): string {
-  if (!postElement) return '';
-  
+  if (!postElement) return ''
+
   const postContent = postElement.querySelector(
-    '.feed-shared-update-v2__description, ' + 
-    '.update-components-text, ' + 
-    '[data-test-feed-shared-text]'
-  );
-  
-  let postText = postContent ? postContent.textContent?.trim() || '' : '';
-  
+    '.feed-shared-update-v2__description, ' +
+      '.update-components-text, ' +
+      '[data-test-feed-shared-text]'
+  )
+
+  let postText = postContent ? postContent.textContent?.trim() || '' : ''
+
   // Remove "...more" or "See more" if present
-  postText = postText.replace(/(\u2026more|\.{3}more|See more)/gi, '').replace(/^\s+|\s+$/g, '');
-  
-  return postText;
+  postText = postText
+    .replace(/(\u2026more|\.{3}more|See more)/gi, '')
+    .replace(/^\s+|\s+$/g, '')
+
+  return postText
 }
 
 /**
@@ -30,12 +32,12 @@ export function debounce<T extends (...args: any[]) => any>(
   func: T,
   wait: number = 300
 ): (...args: Parameters<T>) => void {
-  let timeout: ReturnType<typeof setTimeout>;
-  return function(this: any, ...args: Parameters<T>): void {
-    const context = this;
-    clearTimeout(timeout);
-    timeout = setTimeout(() => func.apply(context, args), wait);
-  };
+  let timeout: ReturnType<typeof setTimeout>
+  return function (this: any, ...args: Parameters<T>): void {
+    const context = this
+    clearTimeout(timeout)
+    timeout = setTimeout(() => func.apply(context, args), wait)
+  }
 }
 
 /**
@@ -52,7 +54,15 @@ export function createObserver(
   options: MutationObserverInit = { subtree: true, childList: true },
   debounceTime: number = 100
 ): MutationObserver {
-  const observer = new MutationObserver(debounce(callback, debounceTime));
-  observer.observe(target, options);
-  return observer;
+  const observer = new MutationObserver(debounce(callback, debounceTime))
+  observer.observe(target, options)
+  return observer
+}
+
+/**
+ * Generate a random delay between 5 to 9 seconds
+ * @returns Random delay in milliseconds
+ */
+export const getRandomDelay = () => {
+  return Math.floor(Math.random() * (9000 - 5000 + 1)) + 5000
 }

@@ -105,8 +105,11 @@ function IndexSidePanel() {
         handleOpenSettings as EventListener
       )
 
+      // Clear last post text (fire and forget, no need to await)
       StorageService.setData({
         [STORAGE_KEYS.LAST_POST_TEXT]: ''
+      }).catch(() => {
+        // Ignore errors during cleanup
       })
     }
   }, [])

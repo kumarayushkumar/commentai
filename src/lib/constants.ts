@@ -26,7 +26,8 @@ export const LINKEDIN_SELECTORS: LinkedInSelectors = {
   POST_CONTAINER: '.feed-shared-update-v2, .scaffold-finite-scroll__content',
   POST_CONTENT:
     '.feed-shared-update-v2__description, .update-components-text, [data-test-feed-shared-text]',
-  SUBMIT_COMMENT_BUTTON: '.comments-comment-box__submit-button--cr'
+  SUBMIT_COMMENT_BUTTON: '.comments-comment-box__submit-button--cr',
+  PROMOTED_POST: '.update-components-actor__sub-description'
 }
 
 /**
