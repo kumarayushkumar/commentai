@@ -45,7 +45,7 @@ export const CommentTab = ({
           }`}
           onClick={onRefresh}
           disabled={fetchingComments}>
-          {fetchingComments ? 'Loading...' : 'Refresh'}
+          {fetchingComments ? 'Thinking...' : 'Refresh'}
         </button>
       </div>
 

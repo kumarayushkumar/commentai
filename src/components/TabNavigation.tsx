@@ -3,8 +3,10 @@
  */
 
 interface TabNavigationProps {
-  activeTab: 'comment' | 'autoComment' | 'settings'
-  onTabChange: (tab: 'comment' | 'autoComment' | 'settings') => void
+  activeTab: 'comment' | 'autoComment' | 'settings' | 'feedback'
+  onTabChange: (
+    tab: 'comment' | 'autoComment' | 'settings' | 'feedback'
+  ) => void
 }
 
 export const TabNavigation = ({
@@ -14,7 +16,8 @@ export const TabNavigation = ({
   const tabs = [
     { id: 'comment', label: 'Comment' },
     { id: 'autoComment', label: 'Auto Comment' },
-    { id: 'settings', label: 'Settings' }
+    { id: 'settings', label: 'Settings' },
+    { id: 'feedback', label: 'Feedback' }
   ] as const
 
   return (
@@ -22,7 +25,7 @@ export const TabNavigation = ({
       {tabs.map((tab) => (
         <button
           key={tab.id}
-          className={`py-2 px-4 font-medium ${
+          className={`py-2 px-3 font-medium ${
             activeTab === tab.id
               ? 'border-b-2 border-primary'
               : 'hover:bg-secondary'

@@ -10,9 +10,9 @@ import StorageService, { STORAGE_KEYS } from '../services/storage'
 
 export const useComments = () => {
   const [comments, setComments] = useState<string[]>([
-    'Loading...',
-    'Loading...',
-    'Loading...'
+    'Thinking...',
+    'Thinking...',
+    'Thinking...'
   ])
   const [fetchingComments, setFetchingComments] = useState(false)
 
@@ -21,7 +21,7 @@ export const useComments = () => {
     if (fetchingComments) return
 
     setFetchingComments(true)
-    setComments(['Loading...', 'Loading...', 'Loading...'])
+    setComments(['Thinking...', 'Thinking...', 'Thinking...'])
 
     const dataFromStorage = await StorageService.getData([
       STORAGE_KEYS.LAST_POST_TEXT,

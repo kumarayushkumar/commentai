@@ -9,6 +9,7 @@ import './style.css'
 
 import { AutoCommentTab } from './components/AutoCommentTab'
 import { CommentTab } from './components/CommentTab'
+import { FeedbackTab } from './components/FeedbackTab'
 import { SettingsTab } from './components/SettingsTab'
 import { TabNavigation } from './components/TabNavigation'
 import { useAutoComment } from './hooks/useAutoComment'
@@ -26,7 +27,7 @@ function IndexSidePanel() {
   const autoCommentTargetRef = useRef<HTMLInputElement>(null)
 
   const [activeTab, setActiveTab] = useState<
-    'comment' | 'autoComment' | 'settings'
+    'comment' | 'autoComment' | 'settings' | 'feedback'
   >('comment')
 
   const [statusMessage, showStatusMessage, clearStatusMessage] =
@@ -201,6 +202,8 @@ function IndexSidePanel() {
             onResetPrompt={handleResetPrompt}
           />
         )}
+
+        {activeTab === 'feedback' && <FeedbackTab />}
       </div>
     </div>
   )
