@@ -4,13 +4,15 @@
 
 import { Storage } from '@plasmohq/storage'
 
+import { showNotification } from '~lib/notification'
+
 export interface StorageKeys {
   EXTENSION_ACTIVE: string
   IS_SINGLE_COMMENT_MODE: string
   DEFAULT_PROMPT: string
   LAST_POST_TEXT: string
   CUSTOM_PROMPT: string
-  API_KEY: string | null
+  API_KEY: string
   AUTO_COMMENT_TARGET: string
 }
 
@@ -21,7 +23,7 @@ export const STORAGE_KEYS: StorageKeys = {
   DEFAULT_PROMPT: 'defaultPrompt',
   LAST_POST_TEXT: 'lastPostText',
   CUSTOM_PROMPT: 'customPrompt',
-  API_KEY: null,
+  API_KEY: 'API_KEY',
   AUTO_COMMENT_TARGET: 'autoCommentTarget'
 }
 
@@ -49,20 +51,22 @@ class StorageService {
             try {
               result[key] = await storage.get(key)
             } catch (e) {
-              throw new Error(
-                `Error getting key "${key}": ${(e as Error).message}`
-              )
+              result[key] = undefined
             }
           })
         )
       } else {
         // Handle single key
-        result[keys] = await storage.get(keys)
+        try {
+          result[keys] = await storage.get(keys)
+        } catch (e) {
+          result[keys] = undefined
+        }
       }
 
       return result
     } catch (error) {
-      throw new Error(`Storage get error: ${(error as Error).message}`)
+      return {}
     }
   }
 
@@ -72,12 +76,13 @@ class StorageService {
    */
   static async setData(data: { [key: string]: any }): Promise<void> {
     try {
-      if (!(await this.isAccessible())) return
+      if (!(await this.isAccessible())) {
+        return
+      }
       await Promise.all(
         Object.entries(data).map(([key, value]) => storage.set(key, value))
       )
     } catch (error) {
-      throw new Error(`Storage set error: ${(error as Error).message}`)
     }
   }
 
@@ -90,13 +95,8 @@ class StorageService {
       await storage.get('test')
       return true
     } catch (error) {
-      if (
-        (error as Error).message &&
-        (error as Error).message.includes('Extension context invalidated')
-      ) {
-        return false
-      }
-      return true
+      showNotification('Storage is not accessible.', 'error')
+      return false
     }
   }
 }

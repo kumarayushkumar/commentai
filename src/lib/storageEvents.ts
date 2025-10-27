@@ -10,20 +10,24 @@ import { showNotification } from './notification'
  * @returns {Promise<string | null>} - The stored API key
  */
 export async function getApiKey(): Promise<string | null> {
-  const apiKey = await StorageService.getData(STORAGE_KEYS.API_KEY)
-  if (!apiKey) {
+  const result = await StorageService.getData(STORAGE_KEYS.API_KEY)
+  const apiKey = result[STORAGE_KEYS.API_KEY]
+
+  if (!apiKey || apiKey.trim() === '') {
     showNotification(
-      'API key not configured. Please update in settings.',
-      'error'
+      'API key not configured. Please configure in settings.',
+      'warning'
     )
-    // Open settings tab
+
+    // Dispatch event to open settings tab
     const event = new CustomEvent('open-settings', {
       detail: { reason: 'missing-api-key' }
     })
     document.dispatchEvent(event)
+
     return null
   }
-  return apiKey.API_KEY
+  return apiKey
 }
 
 /**
@@ -46,7 +50,6 @@ export function setupLastPostTextWatcher() {
             key: STORAGE_KEYS.LAST_POST_TEXT,
             newValue: change.newValue,
             oldValue: change.oldValue,
-            // Add timestamp to force refresh even with same content
             timestamp: Date.now()
           }
         })

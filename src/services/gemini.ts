@@ -29,7 +29,13 @@ export class GeminiService {
   }): Promise<string | string[]> {
     try {
       const apiKey = await getApiKey()
-      if (!apiKey) return []
+      if (!apiKey) {
+        return [
+          'Error generating comment variants',
+          'Error generating comment variants',
+          'Error generating comment variants'
+        ]
+      }
 
       const ai = new GoogleGenAI({ apiKey })
 
@@ -39,56 +45,36 @@ export class GeminiService {
         contents: content,
         config: {
           temperature: AI_SETTINGS.TEMPERATURE,
-          candidateCount: isSingleCommentMode ? AI_SETTINGS.N : 1
+          candidateCount: isSingleCommentMode ? 1 : 3
         }
       })
 
-      if (!result || !result.text) {
-        throw new Error('API returned no response')
+      if (!result || !result.candidates || result.candidates.length === 0) {
+        return [
+          'Error generating comment variants',
+          'Error generating comment variants',
+          'Error generating comment variants'
+        ]
       }
 
-      const text = result.text
+      // Extract text from all candidates
+      const comments = result.candidates
+        .map((candidate) => candidate.content?.parts?.[0]?.text)
+        .filter((text) => text && text.trim())
 
-      // For single comment mode, return as array for consistency
-      if (isSingleCommentMode) {
-        // Split by common separators if multiple variants in one response
-        const variants = text
-          .split(/\n---\n|\n\n---\n\n/)
-          .filter((v) => v.trim())
-        return variants.length > 0 ? variants : [text]
-      }
-
-      return text
+      return comments.length > 0
+        ? comments
+        : [
+            'Error generating comment variants',
+            'Error generating comment variants',
+            'Error generating comment variants'
+          ]
     } catch (error) {
-      const enhancedError = new Error(
-        error instanceof Error ? error.message : 'Unknown error'
-      ) as GeminiError
-
-      // Format error message based on type
-      if (error instanceof Error) {
-        if (error.message.includes('API key')) {
-          enhancedError.userMessage =
-            'API key not configured. Please update your settings.'
-        } else if (
-          error.message.includes('rate limit') ||
-          error.message.includes('quota')
-        ) {
-          enhancedError.userMessage =
-            'API rate limit exceeded. Please try again later.'
-        } else if (
-          error.message.includes('network') ||
-          error.message.includes('connect')
-        ) {
-          enhancedError.userMessage =
-            'Network error. Please check your internet connection.'
-        } else {
-          enhancedError.userMessage = error.message || 'An error occurred'
-        }
-      } else {
-        enhancedError.userMessage = 'An unexpected error occurred'
-      }
-
-      throw enhancedError
+      return [
+        'Error generating comment variants',
+        'Error generating comment variants',
+        'Error generating comment variants'
+      ]
     }
   }
 

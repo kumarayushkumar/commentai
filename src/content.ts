@@ -9,14 +9,8 @@ import { createObserver, extractPostText } from './lib/helpers'
 import { showNotification } from './lib/notification'
 import StorageService, { STORAGE_KEYS } from './services/storage'
 
-declare global {
-  interface Window {
-    chrome: typeof chrome
-  }
-}
-
 ;(function () {
-  function initLinkedInAutoCommenter() {
+  function initExtension() {
     // Track URL changes to reinitialize on navigation
     let lastUrl = location.href
     createObserver(
@@ -67,127 +61,77 @@ declare global {
 
     // Handle comment button click
     async function handleCommentClick(this: HTMLElement, event: MouseEvent) {
-      try {
-        // Check if extension is active
-        let isActive = true
-        try {
-          const result = await StorageService.getData(
-            STORAGE_KEYS.EXTENSION_ACTIVE
-          )
-          isActive = result[STORAGE_KEYS.EXTENSION_ACTIVE] !== false
-        } catch (storageError: any) {
-          if (
-            storageError.message &&
-            (storageError.message.includes('Extension context invalidated') ||
-              storageError.message.includes('Storage get error'))
-          ) {
-            showNotification(
-              'Extension was updated or reloaded. Please refresh the page.',
-              'warning'
-            )
-            return
-          }
-        }
+      // Check if extension is active
+      const result = await StorageService.getData(STORAGE_KEYS.EXTENSION_ACTIVE)
+      const isActive = result[STORAGE_KEYS.EXTENSION_ACTIVE] !== false
 
-        if (!isActive) {
-          showNotification(
-            'Extension is disabled. Enable it in the side panel settings.',
-            'info'
-          )
-          return
-        }
+      if (!isActive) {
+        showNotification(
+          'Extension is disabled. Enable it in the side panel settings.',
+          'info'
+        )
+        return
+      }
 
-        // Find post element and mark it as active
-        const postElement = this.closest(LINKEDIN_SELECTORS.POST_CONTAINER)
-        if (postElement) {
-          // Remove active class from any previously active post
-          document.querySelectorAll('.active-post').forEach((post) => {
-            post.classList.remove('active-post')
-          })
+      // Find post element and mark it as active
+      const postElement = this.closest(LINKEDIN_SELECTORS.POST_CONTAINER)
+      if (postElement) {
+        // Remove active class from any previously active post
+        document.querySelectorAll('.active-post').forEach((post) => {
+          post.classList.remove('active-post')
+        })
 
-          // Add active class to the current post
-          postElement.classList.add('active-post')
+        // Add active class to the current post
+        postElement.classList.add('active-post')
 
-          // Extract text from the active post
-          const postText = extractPostText(postElement as HTMLElement)
+        // Extract text from the active post
+        const postText = extractPostText(postElement as HTMLElement)
 
-          try {
-            // Check if API key is configured
-            let hasApiKey = false
-            try {
-              const apiKeyResult = await StorageService.getData('API_KEY')
-              hasApiKey = !!(apiKeyResult && apiKeyResult['API_KEY'])
-            } catch (error) {
-              console.error('Error checking API key:', error)
+        // Save post text with timestamp
+        const postDataWithTimestamp = `${postText}|||${Date.now()}`
+        await StorageService.setData({
+          [STORAGE_KEYS.LAST_POST_TEXT]: postDataWithTimestamp
+        })
+
+        // Open side panel
+        chrome.runtime.sendMessage(
+          {
+            action: 'openSidePanel'
+          },
+          (response) => {
+            if (chrome.runtime.lastError) {
+              const errorMessage =
+                chrome.runtime.lastError.message || 'Unknown error'
+              // Show a more user-friendly message for connection errors
+              const userMessage = errorMessage.includes('establish connection')
+                ? 'Extension needs to be reloaded. Please refresh the page or restart Chrome.'
+                : errorMessage
+              showNotification(
+                'Failed to open side panel: ' + userMessage,
+                'error'
+              )
+            } else {
             }
-
-            // Save post text with timestamp
-            const postDataWithTimestamp = `${postText}|||${Date.now()}`
-            await StorageService.setData({
-              LAST_POST_TEXT: postDataWithTimestamp
-            })
-
-            // Open side panel
-            chrome.runtime.sendMessage(
-              {
-                action: 'openSidePanel',
-                openSettings: !hasApiKey // Signal to open settings if no API key
-              },
-              (response) => {
-                if (chrome.runtime.lastError) {
-                  const errorMessage =
-                    chrome.runtime.lastError.message || 'Unknown error'
-                  // Show a more user-friendly message for connection errors
-                  const userMessage = errorMessage.includes(
-                    'establish connection'
-                  )
-                    ? 'Extension needs to be reloaded. Please refresh the page or restart Chrome.'
-                    : errorMessage
-                  showNotification(
-                    'Failed to open side panel: ' + userMessage,
-                    'error'
-                  )
-                } else if (!hasApiKey) {
-                  showNotification(
-                    'Please configure your API key in settings',
-                    'warning'
-                  )
-                } else {
-                  showNotification('Check side panel for comments', 'info')
-                }
-              }
-            )
-          } catch (saveError: any) {
-            showNotification('Error saving post text. Try again.', 'error')
           }
-        } else {
-          showNotification('Could not find the LinkedIn post.', 'error')
-        }
-      } catch (error: any) {
-        showNotification('Error handling comment button click', 'error')
+        )
+      } else {
+        showNotification('Could not find the LinkedIn post.', 'error')
       }
     }
   }
 
   async function initialize() {
-    try {
-      const storageAccessible = await StorageService.isAccessible()
-      if (!storageAccessible) {
-        showNotification(
-          'Storage is not accessible. Please check permissions.',
-          'error'
-        )
-        return
-      }
-
-      // Now that dependencies are loaded and storage is accessible, initialize the extension
-      initLinkedInAutoCommenter()
-    } catch (error) {
+    const storageAccessible = await StorageService.isAccessible()
+    if (!storageAccessible) {
       showNotification(
-        'Failed to initialize extension. Please refresh the page.',
+        'Storage is not accessible. Please check permissions.',
         'error'
       )
+      return
     }
+
+    // Now that dependencies are loaded and storage is accessible, initialize the extension
+    initExtension()
   }
 
   if (document.readyState === 'loading') {
@@ -211,7 +155,6 @@ declare global {
 
           const event = new Event('input', { bubbles: true })
           activeCommentBox.dispatchEvent(event)
-
           ;(activeCommentBox as HTMLElement).focus()
         }
       } else {

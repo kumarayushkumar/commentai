@@ -15,3 +15,9 @@ export interface LinkedInSelectors {
   POST_CONTAINER: string;
   POST_CONTENT: string;
 }
+
+declare global {
+  interface Window {
+    chrome: typeof chrome
+  }
+}

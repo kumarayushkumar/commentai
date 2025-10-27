@@ -12,21 +12,24 @@ export function showNotification(
 ): HTMLDivElement {
   // Create notification element if it doesn't exist
   let notification = document.getElementById(
-    'lai-notification'
+    'commentkit-notification'
   ) as HTMLDivElement
 
   if (!notification) {
     notification = document.createElement('div')
-    notification.id = 'lai-notification'
+    notification.id = 'commentkit-notification'
     notification.setAttribute('role', 'alert') // ARIA role for accessibility
     notification.style.cssText = `
       position: fixed;
       bottom: 20px;
       right: 20px;
-      padding: 10px 20px;
+      padding: 6px 12px;
       border-radius: 4px;
+      display: flex;
+      align-items: center;
       z-index: 9999;
       font-family: Arial, sans-serif;
+      font-size: 12.5px;
       transition: opacity 0.3s ease-in-out;
       display: flex;
       align-items: center;
@@ -59,7 +62,7 @@ export function showNotification(
     margin-left: 10px;
     cursor: pointer;
     font-size: 18px;
-    font-weight: bold;
+    font-weight: 700;
   `
   closeBtn.onclick = () => {
     notification.style.opacity = '0'
@@ -90,7 +93,7 @@ export function showBackgroundNotification(
 ): void {
   // Map notification types to titles
   const notificationConfig = {
-    info: { title: title || 'LinkedIn AI Commenter' },
+    info: { title: title || 'Comment Kit' },
     success: { title: title || 'Success' },
     error: { title: title || 'Error' },
     warning: { title: title || 'Warning' }

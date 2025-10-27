@@ -1,6 +1,6 @@
 {
-  "name": "ai-comment",
-  "displayName": "Ai comment",
+  "name": "commentkit",
+  "displayName": "CommentKit",
   "version": "0.0.1",
   "description": "Comment on linkedin post using ai",
   "author": "",
