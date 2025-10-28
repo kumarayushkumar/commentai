@@ -1,1 +1,1 @@
-# LinkedIn Auto Commenter
+# CommentKit

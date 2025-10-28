@@ -77,8 +77,6 @@ export const useAutoComment = () => {
         data[STORAGE_KEYS.DEFAULT_PROMPT] ||
         ''
 
-      console.log('Prompt to use:', promptToUse ? 'Prompt found' : 'No prompt!')
-
       if (!promptToUse) {
         showMessage(
           'Error: No prompt configured. Please set a prompt in settings.'
@@ -136,17 +134,12 @@ export const useAutoComment = () => {
         }
 
         // Generate comment
-        const content = `This is a linked post,\n${response.postText}\n\n---\n${promptToUse}`
-        console.log(
-          'Generating comment for post:',
-          response.postText.substring(0, 100)
-        )
+        const content = `${promptToUse}\n LinkedIn Post: \n${response.postText}`
+
         const generatedComments = await geminiService.generateComment({
           content,
           isSingleCommentMode: true
         })
-
-        console.log('Generated comments:', generatedComments)
 
         // Check if generation failed
         if (generatedComments === false) {
@@ -159,8 +152,6 @@ export const useAutoComment = () => {
           : typeof generatedComments === 'string'
             ? generatedComments
             : ''
-
-        console.log('Final comment to use:', comment)
 
         if (!comment) {
           showMessage('Failed to generate comment. Skipping post...')

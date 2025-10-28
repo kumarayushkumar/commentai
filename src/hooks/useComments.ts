@@ -54,7 +54,7 @@ export const useComments = () => {
       return
     }
 
-    const content = `This is a linked post,\n${actualPostText}\n\n---\n${promptToUse}`
+    const content = `${promptToUse}\n LinkedIn Post: \n${actualPostText}`
 
     const generatedComments = await geminiService.generateComment({ content })
 

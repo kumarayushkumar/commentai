@@ -129,7 +129,6 @@ export class GeminiService {
           message: 'API key cannot be empty'
         }
       }
-      console.log('Validating Gemini API key...', apiKey)
 
       const ai = new GoogleGenAI({ apiKey })
 
