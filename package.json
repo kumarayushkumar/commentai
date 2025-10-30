@@ -2,8 +2,8 @@
   "name": "commentkit",
   "displayName": "CommentKit",
   "version": "0.0.1",
-  "description": "Comment on linkedin post using ai",
-  "author": "",
+  "description": "Automatically comments on LinkedIn posts using AI.",
+  "author": "ayushkumar",
   "scripts": {
     "dev": "plasmo dev",
     "build": "plasmo build",
@@ -31,7 +31,8 @@
   },
   "manifest": {
     "host_permissions": [
-      "https://*/*"
+      "https://www.linkedin.com/*",
+      "https://linkedin.com/*"
     ],
     "permissions": [
       "storage",

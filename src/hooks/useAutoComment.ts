@@ -27,7 +27,17 @@ export const useAutoComment = () => {
     action: string,
     data?: any
   ) => {
-    return chrome.tabs.sendMessage(tabId, { action, ...data })
+    try {
+      return await chrome.tabs.sendMessage(tabId, { action, ...data })
+    } catch (error) {
+      const errorMsg = (error as Error).message || ''
+      if (errorMsg.includes('Receiving end does not exist')) {
+        throw new Error(
+          'Content script not loaded. Please refresh the LinkedIn page and try again.'
+        )
+      }
+      throw error
+    }
   }
 
   const setAutoCommentingMode = async (enabled: boolean) => {
@@ -102,6 +112,19 @@ export const useAutoComment = () => {
       if (!activeTab.url?.includes('linkedin.com')) {
         showMessage(
           'Error: Please navigate to LinkedIn feed. Auto-commenting only works on LinkedIn posts.'
+        )
+        await cleanupAutoComment()
+        return
+      }
+
+      // Verify content script is loaded by sending a test message
+      try {
+        await sendMessageToTab(activeTab.id, 'setAutoCommentingMode', {
+          enabled: false
+        })
+      } catch (error) {
+        showMessage(
+          'Error: Please refresh the LinkedIn page and try again. Content script not loaded.'
         )
         await cleanupAutoComment()
         return

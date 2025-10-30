@@ -20,6 +20,17 @@ let isAutoCommenting = false
 let currentUserProfileUrl = ''
 
 /**
+ * Check if extension context is still valid
+ */
+function isExtensionContextValid(): boolean {
+  try {
+    return chrome.runtime && chrome.runtime.id !== undefined
+  } catch {
+    return false
+  }
+}
+
+/**
  * Extract and cache the current user's LinkedIn profile username
  */
 function getCurrentUserProfileUrl(): string {
@@ -222,6 +233,14 @@ function proceedWithComment(
 async function handleCommentClick(this: HTMLElement) {
   if (isAutoCommenting) return
 
+  if (!isExtensionContextValid()) {
+    showNotification(
+      'Extension was reloaded. Please refresh this page.',
+      'warning'
+    )
+    return
+  }
+
   const result = await StorageService.getData(STORAGE_KEYS.EXTENSION_ACTIVE)
   const isActive = result[STORAGE_KEYS.EXTENSION_ACTIVE] !== false
 
@@ -248,15 +267,24 @@ async function handleCommentClick(this: HTMLElement) {
     [STORAGE_KEYS.LAST_POST_TEXT]: postDataWithTimestamp
   })
 
-  chrome.runtime.sendMessage({ action: 'openSidePanel' }, (response) => {
-    if (chrome.runtime.lastError) {
-      const errorMessage = chrome.runtime.lastError.message || 'Unknown error'
-      const userMessage = errorMessage.includes('establish connection')
-        ? 'Extension needs to be reloaded. Please refresh the page or restart Chrome.'
-        : errorMessage
-      showNotification('Failed to open side panel: ' + userMessage, 'error')
-    }
-  })
+  try {
+    chrome.runtime.sendMessage({ action: 'openSidePanel' }, (response) => {
+      if (chrome.runtime.lastError) {
+        const errorMessage = chrome.runtime.lastError.message || 'Unknown error'
+        const userMessage = errorMessage.includes('establish connection')
+          ? 'Extension needs to be reloaded. Please refresh the page or restart Chrome.'
+          : errorMessage.includes('Extension context invalidated')
+            ? 'Extension was reloaded. Please refresh this page.'
+            : errorMessage
+        showNotification('Failed to open side panel: ' + userMessage, 'error')
+      }
+    })
+  } catch (error) {
+    showNotification(
+      'Extension connection lost. Please refresh the page.',
+      'error'
+    )
+  }
 }
 
 /**
@@ -333,6 +361,12 @@ async function initialize() {
 
 // Message handlers
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // Check if extension context is still valid
+  if (!isExtensionContextValid()) {
+    sendResponse({ success: false, error: 'Extension context invalidated' })
+    return true
+  }
+
   const { action } = message
 
   if (action === 'setAutoCommentingMode') {
@@ -422,6 +456,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   return true
 })
+
+// Detect extension context invalidation
+chrome.runtime
+  .connect({ name: 'content-script' })
+  .onDisconnect.addListener(() => {
+    if (!isExtensionContextValid()) {
+      // Extension was reloaded/disabled
+      isAutoCommenting = false
+    }
+  })
 
 // Start initialization
 if (document.readyState === 'loading') {
