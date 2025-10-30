@@ -67,11 +67,22 @@ export class GeminiService {
       if (error?.message) {
         try {
           const errorData = JSON.parse(error.message)
+
           if (errorData?.error) {
             const errorCode = errorData.error.code
             const errorStatus = errorData.error.status
+            const errorMessage = errorData.error.message
 
-            // Handle quota exceeded
+            // Handle service unavailable (503)
+            if (errorCode === 503 || errorStatus === 'UNAVAILABLE') {
+              showNotification(
+                `Gemini API is currently overloaded. Please try again in a few minutes.`,
+                'error'
+              )
+              return false
+            }
+
+            // Handle quota exceeded (429)
             if (errorCode === 429 || errorStatus === 'RESOURCE_EXHAUSTED') {
               // Extract retry delay if available
               const retryInfo = errorData.error.details?.find((d: any) =>
@@ -97,13 +108,14 @@ export class GeminiService {
             }
 
             // Handle other API errors
-            if (errorData.error.message) {
-              const shortMessage = errorData.error.message.split('.')[0]
+            if (errorMessage) {
+              const shortMessage = errorMessage.split('.')[0]
               showNotification(`API Error: ${shortMessage}`, 'error')
               return false
             }
           }
-        } catch {
+        } catch (parseError) {
+          // Failed to parse as JSON, continue to generic error
         }
       }
 

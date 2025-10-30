@@ -3,17 +3,17 @@
  * Handles comment interactions and integrates with the side panel for AI-generated comments
  */
 
-import { LINKEDIN_SELECTORS } from './lib/constants'
+import {
+  BLUR_DELAY,
+  COMMENT_BOX_WAIT,
+  INPUT_PROCESS_WAIT,
+  LINKEDIN_SELECTORS,
+  SCROLL_DISTANCE,
+  SUBMIT_WAIT
+} from './lib/constants'
 import { createObserver, extractPostText } from './lib/helpers'
 import { showNotification } from './lib/notification'
 import StorageService, { STORAGE_KEYS } from './services/storage'
-
-// Constants for timing
-const COMMENT_BOX_WAIT = 500
-const INPUT_PROCESS_WAIT = 500
-const SUBMIT_WAIT = 500
-const BLUR_DELAY = 300
-const SCROLL_DISTANCE = 800
 
 // Module state
 let isAutoCommenting = false
@@ -71,8 +71,14 @@ function hasAlreadyCommented(postElement: HTMLElement): boolean {
 /**
  * Find the first uncommented, non-promoted post
  */
-function findNextPost(): HTMLElement | null {
+function findNextPost(): {
+  post: HTMLElement | null
+  skippedPromoted: boolean
+} {
   const posts = document.querySelectorAll(LINKEDIN_SELECTORS.POST_CONTAINER)
+  let skippedPromoted = false
+  let alreadyCommentedCount = 0
+  let promotedCount = 0
 
   for (const post of Array.from(posts)) {
     const postElement = post as HTMLElement
@@ -83,6 +89,7 @@ function findNextPost(): HTMLElement | null {
       postElement.dataset.autoCommented === 'true'
     ) {
       postElement.dataset.autoCommented = 'true'
+      alreadyCommentedCount++
       continue
     }
 
@@ -92,13 +99,15 @@ function findNextPost(): HTMLElement | null {
     )
     if (promotedElement?.textContent?.includes('Promoted')) {
       postElement.dataset.autoCommented = 'true'
+      skippedPromoted = true
+      promotedCount++
       continue
     }
 
-    return postElement
+    return { post: postElement, skippedPromoted }
   }
 
-  return null
+  return { post: null, skippedPromoted }
 }
 
 /**
@@ -130,47 +139,81 @@ function fillAndSubmitComment(
 
   commentButton.click()
 
+  // First attempt to find comment box
   setTimeout(() => {
-    const commentBox = post.querySelector(
+    let commentBox = post.querySelector(
       '[contenteditable="true"][role="textbox"]'
     )
 
+    // If comment box not found, try clicking the comment button again
+    // (sometimes the first click expands comments section instead of opening input)
     if (!commentBox) {
-      sendResponse({ success: false, error: 'Comment box not found' })
-      return
-    }
+      commentButton.click()
 
-    commentBox.textContent = comment
-    commentBox.dispatchEvent(new Event('input', { bubbles: true }))
-
-    setTimeout(() => {
+      // Wait a bit longer and try again
       setTimeout(() => {
-        const submitButton = post.querySelector(
-          LINKEDIN_SELECTORS.SUBMIT_COMMENT_BUTTON + ':not([disabled])'
-        ) as HTMLElement
+        commentBox = post.querySelector(
+          '[contenteditable="true"][role="textbox"]'
+        )
 
-        if (!submitButton) {
+        if (!commentBox) {
           sendResponse({
             success: false,
-            error: 'Comment button disabled or not ready'
+            error: 'Comment box not found after retry'
           })
           return
         }
 
-        submitButton.click()
-        post.dataset.autoCommented = 'true'
+        // Proceed with filling comment
+        proceedWithComment(commentBox, comment, post, sendResponse)
+      }, COMMENT_BOX_WAIT)
+      return
+    }
 
-        setTimeout(() => {
-          const box = post.querySelector(
-            '[contenteditable="true"][role="textbox"]'
-          ) as HTMLElement
-          box?.blur()
-        }, BLUR_DELAY)
-
-        sendResponse({ success: true })
-      }, SUBMIT_WAIT)
-    }, INPUT_PROCESS_WAIT)
+    // Comment box found on first try
+    proceedWithComment(commentBox, comment, post, sendResponse)
   }, COMMENT_BOX_WAIT)
+}
+
+/**
+ * Helper function to fill and submit comment once comment box is found
+ */
+function proceedWithComment(
+  commentBox: Element,
+  comment: string,
+  post: HTMLElement,
+  sendResponse: (response: any) => void
+) {
+  commentBox.textContent = comment
+  commentBox.dispatchEvent(new Event('input', { bubbles: true }))
+
+  setTimeout(() => {
+    setTimeout(() => {
+      const submitButton = post.querySelector(
+        LINKEDIN_SELECTORS.SUBMIT_COMMENT_BUTTON + ':not([disabled])'
+      ) as HTMLElement
+
+      if (!submitButton) {
+        sendResponse({
+          success: false,
+          error: 'Comment button disabled or not ready'
+        })
+        return
+      }
+
+      submitButton.click()
+      post.dataset.autoCommented = 'true'
+
+      setTimeout(() => {
+        const box = post.querySelector(
+          '[contenteditable="true"][role="textbox"]'
+        ) as HTMLElement
+        box?.blur()
+      }, BLUR_DELAY)
+
+      sendResponse({ success: true })
+    }, SUBMIT_WAIT)
+  }, INPUT_PROCESS_WAIT)
 }
 
 /**
@@ -320,20 +363,37 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (action === 'getNextPost') {
-    const foundPost = findNextPost()
+    const result = findNextPost()
 
-    if (foundPost) {
-      const postText = extractPostText(foundPost)
-      setActivePost(foundPost, 'auto-comment-active')
-      sendResponse({ success: true, postText })
+    if (result.post) {
+      const postText = extractPostText(result.post)
+      setActivePost(result.post, 'auto-comment-active')
+      sendResponse({
+        success: true,
+        postText,
+        skippedPromoted: result.skippedPromoted
+      })
     } else {
-      sendResponse({ success: false, error: 'No more posts found' })
+      sendResponse({
+        success: false,
+        error: 'No more posts found',
+        skippedPromoted: result.skippedPromoted
+      })
     }
     return true
   }
 
   if (action === 'autoFillAndSubmitComment') {
-    const post = document.querySelector('.auto-comment-active') as HTMLElement
+    let post = document.querySelector('.auto-comment-active') as HTMLElement
+
+    // If the active post is not found, try to find the next post again
+    if (!post) {
+      const result = findNextPost()
+      if (result.post) {
+        post = result.post
+        setActivePost(post, 'auto-comment-active')
+      }
+    }
 
     if (post) {
       fillAndSubmitComment(post, message.comment, sendResponse)

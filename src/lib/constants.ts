@@ -47,3 +47,9 @@ export const DEFAULT_PROMPT =
   'Warnings:\n' +
   '1. Do not use emoji\n' +
   '2. respond just with comment\n'
+
+export const COMMENT_BOX_WAIT = 500
+export const INPUT_PROCESS_WAIT = 500
+export const SUBMIT_WAIT = 500
+export const BLUR_DELAY = 300
+export const SCROLL_DISTANCE = 800

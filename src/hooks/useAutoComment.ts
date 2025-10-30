@@ -81,6 +81,7 @@ export const useAutoComment = () => {
         showMessage(
           'Error: No prompt configured. Please set a prompt in settings.'
         )
+        await cleanupAutoComment()
         return
       }
 
@@ -93,6 +94,16 @@ export const useAutoComment = () => {
 
       if (!activeTab?.id) {
         showMessage('Error: No active tab found')
+        await cleanupAutoComment()
+        return
+      }
+
+      // Check if the active tab is LinkedIn
+      if (!activeTab.url?.includes('linkedin.com')) {
+        showMessage(
+          'Error: Please navigate to LinkedIn feed. Auto-commenting only works on LinkedIn posts.'
+        )
+        await cleanupAutoComment()
         return
       }
 
@@ -100,12 +111,18 @@ export const useAutoComment = () => {
 
       let successfulComments = 0
       let consecutiveNoPostFound = 0
+      let stoppedDueToError = false
 
       while (successfulComments < target && !stopRequestedRef.current) {
         setAutoCommentProgress({ current: successfulComments, total: target })
 
         // Get next post
         const response = await sendMessageToTab(activeTab.id, 'getNextPost')
+
+        // Check if we skipped a promoted post
+        if (response?.skippedPromoted) {
+          showMessage('Skipping promoted post...')
+        }
 
         if (!response?.success) {
           consecutiveNoPostFound++
@@ -126,11 +143,11 @@ export const useAutoComment = () => {
 
         consecutiveNoPostFound = 0
 
-        if (!response?.postText) {
-          showMessage(
-            `No more posts found. Completed ${successfulComments}/${target} comments.`
-          )
-          break
+        if (!response?.postText || response.postText.trim() === '') {
+          showMessage('Skipping post with no text content...')
+          // Mark this post as commented to skip it
+          await sendMessageToTab(activeTab.id, 'markPostAsCommented')
+          continue
         }
 
         // Generate comment
@@ -143,8 +160,9 @@ export const useAutoComment = () => {
 
         // Check if generation failed
         if (generatedComments === false) {
-          await sendMessageToTab(activeTab.id, 'markPostAsCommented')
-          return
+          // Don't mark the post - allow retry later
+          stoppedDueToError = true
+          break
         }
 
         const comment = Array.isArray(generatedComments)
@@ -155,7 +173,7 @@ export const useAutoComment = () => {
 
         if (!comment) {
           showMessage('Failed to generate comment. Skipping post...')
-          await sendMessageToTab(activeTab.id, 'markPostAsCommented')
+          // Don't mark the post - allow retry later
           continue
         }
 
@@ -167,9 +185,9 @@ export const useAutoComment = () => {
         )
 
         if (!submitResponse?.success) {
-          if (submitResponse?.error) {
-            showMessage(`Skipping post: ${submitResponse.error}`)
-          }
+          const errorMsg = submitResponse?.error || 'Unknown error'
+          showMessage(`Skipping post: ${errorMsg}`)
+          // Mark post as commented to skip it
           await sendMessageToTab(activeTab.id, 'markPostAsCommented')
           continue
         }
@@ -182,7 +200,9 @@ export const useAutoComment = () => {
         successfulComments++
         setAutoCommentProgress({ current: successfulComments, total: target })
 
-        if (successfulComments >= target) break
+        if (successfulComments >= target) {
+          break
+        }
 
         // Delay and scroll for next post
         const delay = getRandomDelay()
@@ -193,9 +213,11 @@ export const useAutoComment = () => {
         )
       }
 
-      const message = stopRequestedRef.current
-        ? `Auto commenting stopped at ${successfulComments} comments.`
-        : `Auto commenting complete! Successfully commented on ${successfulComments} posts.`
+      const message = stoppedDueToError
+        ? `Auto commenting stopped at ${successfulComments} comments due to API error. Check notifications for details.`
+        : stopRequestedRef.current
+          ? `Auto commenting stopped at ${successfulComments} comments.`
+          : `Auto commenting complete! Successfully commented on ${successfulComments} posts.`
 
       showMessage(message)
     } catch (error) {
