@@ -27,7 +27,8 @@ export const LINKEDIN_SELECTORS: LinkedInSelectors = {
   POST_CONTENT:
     '.feed-shared-update-v2__description, .update-components-text, [data-test-feed-shared-text]',
   SUBMIT_COMMENT_BUTTON: '.comments-comment-box__submit-button--cr',
-  PROMOTED_POST: '.update-components-actor__sub-description'
+  PROMOTED_POST: '.update-components-actor__sub-description',
+  LIKE_BUTTON: 'button.react-button__trigger[aria-label*="React"]'
 }
 
 /**

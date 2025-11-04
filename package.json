@@ -1,7 +1,7 @@
 {
   "name": "commentkit",
   "displayName": "CommentKit",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Automatically comments on LinkedIn posts using AI.",
   "author": "ayushkumar",
   "scripts": {

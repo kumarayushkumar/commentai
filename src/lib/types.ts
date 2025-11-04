@@ -16,6 +16,7 @@ export interface LinkedInSelectors {
   POST_CONTENT: string
   SUBMIT_COMMENT_BUTTON: string
   PROMOTED_POST: string
+  LIKE_BUTTON: string
 }
 
 declare global {

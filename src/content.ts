@@ -228,6 +228,36 @@ function proceedWithComment(
 }
 
 /**
+ * Like a post
+ */
+function likePost(post: HTMLElement, sendResponse: (response: any) => void) {
+  const likeButton = post.querySelector(
+    LINKEDIN_SELECTORS.LIKE_BUTTON
+  ) as HTMLElement
+
+  if (!likeButton) {
+    sendResponse({ success: false, error: 'Like button not found' })
+    return
+  }
+
+  // Check if already liked (aria-pressed="true")
+  const isAlreadyLiked = likeButton.getAttribute('aria-pressed') === 'true'
+
+  if (isAlreadyLiked) {
+    sendResponse({ success: true, alreadyLiked: true })
+    return
+  }
+
+  // Click the like button
+  likeButton.click()
+
+  // Mark post as liked
+  post.dataset.autoLiked = 'true'
+
+  sendResponse({ success: true, alreadyLiked: false })
+}
+
+/**
  * Handle manual comment button click (not during auto-commenting)
  */
 async function handleCommentClick(this: HTMLElement) {
@@ -445,6 +475,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     } else {
       sendResponse({ success: false, error: 'No active post found' })
     }
+    return true
+  }
+
+  if (action === 'likePost') {
+    const post = document.querySelector('.auto-comment-active') as HTMLElement
+
+    if (!post) {
+      sendResponse({ success: false, error: 'No active post found' })
+      return true
+    }
+
+    likePost(post, sendResponse)
     return true
   }
 

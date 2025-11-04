@@ -220,6 +220,15 @@ export const useAutoComment = () => {
           setTimeout(resolve, POST_SUBMIT_WAIT_TIME)
         )
 
+        // Wait before liking the post
+        await new Promise((resolve) => setTimeout(resolve, 500))
+
+        // Like the post after commenting
+        const likeResponse = await sendMessageToTab(activeTab.id, 'likePost')
+        if (likeResponse?.success && !likeResponse?.alreadyLiked) {
+          showMessage('Commented and liked post')
+        }
+
         successfulComments++
         setAutoCommentProgress({ current: successfulComments, total: target })
 
