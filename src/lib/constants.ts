@@ -10,7 +10,7 @@ import type { AISettings, LinkedInSelectors } from './types'
  * These control the behavior of the OpenAI API requests
  */
 export const AI_SETTINGS: AISettings = {
-  MODEL: 'gemini-2.0-flash',
+  MODEL: 'gemini-2.5-flash',
   TEMPERATURE: 0.4,
   N: 3
 }
