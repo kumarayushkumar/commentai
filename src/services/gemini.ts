@@ -10,9 +10,6 @@ import { AI_SETTINGS } from '~lib/constants'
 import { showNotification } from '~lib/notification'
 import { getApiKey } from '~lib/storageEvents'
 
-interface GeminiError extends Error {
-  userMessage?: string
-}
 
 export class GeminiService {
   /**
@@ -34,34 +31,29 @@ export class GeminiService {
 
       const ai = new GoogleGenAI({ apiKey })
 
-      const result = await ai.models.generateContent({
-        model: AI_SETTINGS.MODEL,
-        contents: content,
-        config: {
-          temperature: AI_SETTINGS.TEMPERATURE,
-          candidateCount: isSingleCommentMode ? 1 : 3
-        }
-      })
+      const count = isSingleCommentMode ? 1 : AI_SETTINGS.N
 
-      if (!result || !result.candidates || result.candidates.length === 0) {
+      const results: Awaited<ReturnType<typeof ai.models.generateContent>>[] = []
+      for (let i = 0; i < count; i++) {
+        const result = await ai.models.generateContent({
+          model: AI_SETTINGS.MODEL,
+          contents: content,
+          config: { temperature: AI_SETTINGS.TEMPERATURE }
+        })
+        results.push(result)
+        if (i < count - 1) await new Promise((r) => setTimeout(r, 500))
+      }
+
+      const comments = results
+        .map((result) => result?.candidates?.[0]?.content?.parts?.[0]?.text ?? result?.text)
+        .filter((text): text is string => !!text && !!text.trim())
+
+      if (comments.length === 0) {
         showNotification('No response from AI. Please try again.', 'error')
         return false
       }
 
-      // Extract text from all candidates
-      const comments = result.candidates
-        .map((candidate) => candidate.content?.parts?.[0]?.text)
-        .filter((text) => text && text.trim())
-
-      if (comments.length === 0) {
-        showNotification(
-          'AI returned empty response. Please try again.',
-          'error'
-        )
-        return false
-      }
-
-      return comments
+      return isSingleCommentMode ? comments[0] : comments
     } catch (error: any) {
       // Parse error for quota/rate limit issues
       if (error?.message) {
@@ -94,14 +86,14 @@ export class GeminiService {
                 const seconds = parseInt(retryDelay) || 60
                 const minutes = Math.ceil(seconds / 60)
                 showNotification(
-                  `Gemini API quota exceeded. You've reached your daily limit of 200 requests. Please try again in ${minutes} minute(s).`,
+                  `Gemini API rate limit hit. Please wait ${minutes} minute(s) and try again.`,
                   'error'
                 )
                 return false
               }
 
               showNotification(
-                `Gemini API quota exceeded. You've reached your daily limit. Please try again later or upgrade your plan.`,
+                `Gemini API quota exceeded. Please try again later or upgrade your plan.`,
                 'error'
               )
               return false

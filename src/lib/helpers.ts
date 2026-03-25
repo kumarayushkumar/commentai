@@ -7,9 +7,7 @@ export function extractPostText(postElement: HTMLElement | null): string {
   if (!postElement) return ''
 
   const postContent = postElement.querySelector(
-    '.feed-shared-update-v2__description, ' +
-      '.update-components-text, ' +
-      '[data-test-feed-shared-text]'
+    '[data-testid="expandable-text-box"]'
   )
 
   let postText = postContent ? postContent.textContent?.trim() || '' : ''

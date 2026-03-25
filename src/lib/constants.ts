@@ -20,15 +20,14 @@ export const AI_SETTINGS: AISettings = {
  * Update these if LinkedIn changes their HTML structure
  */
 export const LINKEDIN_SELECTORS: LinkedInSelectors = {
-  COMMENT_BUTTON: 'button[aria-label="Comment"].artdeco-button--tertiary',
+  COMMENT_BUTTON: 'button:has(svg#comment-small)',
   COMMENT_BOX: '.comments-comment-box-comment__text-editor',
-  COMMENT_INPUT: '[data-test-ql-editor-contenteditable="true"]',
-  POST_CONTAINER: '.feed-shared-update-v2, .scaffold-finite-scroll__content',
-  POST_CONTENT:
-    '.feed-shared-update-v2__description, .update-components-text, [data-test-feed-shared-text]',
+  COMMENT_INPUT: '[contenteditable="true"][role="textbox"]',
+  POST_CONTAINER: '[role="listitem"]',
+  POST_CONTENT: '[data-testid="expandable-text-box"]',
   SUBMIT_COMMENT_BUTTON: '.comments-comment-box__submit-button--cr',
   PROMOTED_POST: '.update-components-actor__sub-description',
-  LIKE_BUTTON: 'button.react-button__trigger[aria-label*="React"]'
+  LIKE_BUTTON: 'button[aria-label*="Reaction button state"]'
 }
 
 /**

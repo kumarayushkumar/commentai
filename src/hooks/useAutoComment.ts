@@ -6,6 +6,7 @@ import { useRef, useState } from 'react'
 
 import { getRandomDelay } from '~lib/helpers'
 
+import { DEFAULT_PROMPT } from '../lib/constants'
 import geminiService from '../services/gemini'
 import StorageService, { STORAGE_KEYS } from '../services/storage'
 
@@ -85,9 +86,9 @@ export const useAutoComment = () => {
       const promptToUse =
         data[STORAGE_KEYS.CUSTOM_PROMPT] ||
         data[STORAGE_KEYS.DEFAULT_PROMPT] ||
-        ''
+        DEFAULT_PROMPT
 
-      if (!promptToUse) {
+      if (!promptToUse.trim()) {
         showMessage(
           'Error: No prompt configured. Please set a prompt in settings.'
         )

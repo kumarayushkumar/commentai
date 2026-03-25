@@ -86,32 +86,33 @@ function findNextPost(): {
   post: HTMLElement | null
   skippedPromoted: boolean
 } {
-  const posts = document.querySelectorAll(LINKEDIN_SELECTORS.POST_CONTAINER)
+  // Find all comment buttons and traverse up to their post containers.
+  // This is more reliable than querySelectorAll on the post container directly.
+  const commentButtons = document.querySelectorAll(
+    LINKEDIN_SELECTORS.COMMENT_BUTTON
+  )
   let skippedPromoted = false
-  let alreadyCommentedCount = 0
-  let promotedCount = 0
 
-  for (const post of Array.from(posts)) {
-    const postElement = post as HTMLElement
+  for (const button of Array.from(commentButtons)) {
+    const postElement = (button as HTMLElement).closest(
+      LINKEDIN_SELECTORS.POST_CONTAINER
+    ) as HTMLElement | null
+    if (!postElement) continue
 
-    // Check if already commented
     if (
-      hasAlreadyCommented(postElement) ||
-      postElement.dataset.autoCommented === 'true'
+      postElement.dataset.autoCommented === 'true' ||
+      hasAlreadyCommented(postElement)
     ) {
       postElement.dataset.autoCommented = 'true'
-      alreadyCommentedCount++
       continue
     }
 
-    // Check if promoted
     const promotedElement = postElement.querySelector(
       LINKEDIN_SELECTORS.PROMOTED_POST
     )
     if (promotedElement?.textContent?.includes('Promoted')) {
       postElement.dataset.autoCommented = 'true'
       skippedPromoted = true
-      promotedCount++
       continue
     }
 
@@ -150,22 +151,18 @@ function fillAndSubmitComment(
 
   commentButton.click()
 
-  // First attempt to find comment box
-  setTimeout(() => {
-    let commentBox = post.querySelector(
-      '[contenteditable="true"][role="textbox"]'
-    )
+  const findCommentBox = () =>
+    post.querySelector<Element>('[contenteditable="true"][role="textbox"]') ||
+    document.querySelector<Element>('[contenteditable="true"][role="textbox"]')
 
-    // If comment box not found, try clicking the comment button again
-    // (sometimes the first click expands comments section instead of opening input)
+  setTimeout(() => {
+    let commentBox = findCommentBox()
+
     if (!commentBox) {
       commentButton.click()
 
-      // Wait a bit longer and try again
       setTimeout(() => {
-        commentBox = post.querySelector(
-          '[contenteditable="true"][role="textbox"]'
-        )
+        commentBox = findCommentBox()
 
         if (!commentBox) {
           sendResponse({
@@ -175,13 +172,11 @@ function fillAndSubmitComment(
           return
         }
 
-        // Proceed with filling comment
         proceedWithComment(commentBox, comment, post, sendResponse)
       }, COMMENT_BOX_WAIT)
       return
     }
 
-    // Comment box found on first try
     proceedWithComment(commentBox, comment, post, sendResponse)
   }, COMMENT_BOX_WAIT)
 }
